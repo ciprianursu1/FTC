@@ -1,0 +1,85 @@
+package org.firstinspires.ftc.teamcode.TeleOp.Main;
+
+import com.qualcomm.robotcore.hardware.ColorSensor;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+
+public class ColorSystem {
+
+    //variabile colorate 😉
+    int[] last5 = new int[5];
+    int index = 0;
+    ColorSensor colorsensor;
+
+    int[] slots = new int[3];
+    int slotIndex = 0;
+
+    LinearOpMode opMode;
+
+    public ColorSystem(LinearOpMode opMode) {
+        this.opMode = opMode;
+    }
+
+    public void InitColorSensor() {
+        colorsensor = opMode.hardwareMap.colorSensor.get("colorsensor");
+    }
+
+    private double getHue(int r, int g, int b) {
+        int max = Math.max(r, Math.max(g, b));
+        int min = Math.min(r, Math.min(g, b));
+        if (max == min) return 0.0;
+        double chroma = max - min;
+        double h;
+        if (max == r) h = (double)(g - b) / chroma;
+        else if (max == g) h = (double)(b - r) / chroma + 2.0;
+        else h = (double)(r - g) / chroma + 4.0;
+        h *= 60.0;
+        if (h < 0) h += 360.0;
+        return h;
+    }
+
+    private int processColorSensor() {
+        int r = colorsensor.red();
+        int g = colorsensor.green();
+        int b = colorsensor.blue();
+        int alpha = colorsensor.alpha();
+
+        double h = getHue(r, g, b);
+
+        int detected;
+        if (alpha < 100 && (h == 150 || h == 144)) detected = 0;
+        else if ((h > 215) || (alpha < 100 && (h == 160 || h == 180))) detected = 2;
+        else if (h > 135 && h < 160) detected = 1;
+        else if ((h == 210 || h == 220 || h == 225 || h == 200) && alpha < 100) detected = 2;
+        else detected = 0;
+
+        last5[index] = detected;
+        index = (index + 1) % 5;
+
+        int count0 = 0, count1 = 0, count2 = 0;
+        for (int v : last5) {
+            if (v == 0) count0++;
+            else if (v == 1) count1++;
+            else if (v == 2) count2++;
+        }
+
+        int finalColor = 0;
+        if (count1 >= 3 && count1 > count2) finalColor = 1;
+        else if (count2 >= 3 && count2 > count1) finalColor = 2;
+
+        return finalColor;
+    }
+
+    private int[] updateColorVector() {
+        int color = processColorSensor();
+        slots[slotIndex] = color;
+        slotIndex = (slotIndex + 1) % 3;
+        return slots;
+    }
+
+    private void resetSlots() {
+        slots[0] = 0;
+        slots[1] = 0;
+        slots[2] = 0;
+        slotIndex = 0;
+    }
+}
