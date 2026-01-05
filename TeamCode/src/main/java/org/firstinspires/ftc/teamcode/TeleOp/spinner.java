@@ -6,6 +6,7 @@ import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 @TeleOp(name="ColorDetection+cevaspinner")
+
 public class spinner extends LinearOpMode {
 
     int[] last5Sensor1 = new int[5];
