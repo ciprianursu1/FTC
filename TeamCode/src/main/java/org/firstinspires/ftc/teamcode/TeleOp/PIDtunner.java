@@ -16,9 +16,9 @@ public class PIDtunner extends LinearOpMode {
     static final double TICKS_PER_DEGREE = TICKS_PER_REV / 360.0;
 
     // PID coefficients (P is tunable)
-    double P = 0.008;
+    double P = 0.0101;
     double I = 0.0000;
-    double D = 0.003;
+    double D = 0.0015;
 
     double integralSum = 0;
     double lastError = 0;
@@ -29,7 +29,7 @@ public class PIDtunner extends LinearOpMode {
     @Override
     public void runOpMode() {
 
-        spinner = hardwareMap.get(DcMotorEx.class, "Spinner");
+        spinner = hardwareMap.get(DcMotorEx.class, "spinner");
 
         spinner.setDirection(DcMotorSimple.Direction.FORWARD);
         spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
@@ -45,21 +45,16 @@ public class PIDtunner extends LinearOpMode {
         while (opModeIsActive()) {
 
             // Target positions
-            if (gamepad1.aWasPressed()) {
-                targetTicks = (int)(60 * TICKS_PER_DEGREE);
-            }
+            //if (gamepad1.aWasPressed()) {
+              //  targetTicks = (int)(60 * TICKS_PER_DEGREE);
+           // }
             if (gamepad1.bWasPressed()) {
                 targetTicks = 0;
             }
             if (gamepad1.xWasPressed()) {
-                targetTicks = (int)(120 * TICKS_PER_DEGREE);
+                targetTicks =targetTicks + (int)(120 * TICKS_PER_DEGREE);
             }
 
-            /* =========================
-               REAL-TIME P TUNING
-               ========================= */
-
-            // D-pad UP → increase P
             if (gamepad1.dpadUpWasPressed() ) {
                 P += 0.0005;
             }
@@ -82,10 +77,6 @@ public class PIDtunner extends LinearOpMode {
 
 
 
-            /* =========================
-               PID CONTROL
-               ========================= */
-
             double currentPos = spinner.getCurrentPosition();
             double error = targetTicks - currentPos;
 
@@ -98,12 +89,9 @@ public class PIDtunner extends LinearOpMode {
 
             spinner.setPower(pidOutput);
 
-            /* =========================
-               TELEMETRY
-               ========================= */
 
             telemetry.addData("Target (deg)", targetTicks / TICKS_PER_DEGREE);
-            telemetry.addData("Current (deg)", currentPos / TICKS_PER_DEGREE);
+            telemetry.addData("Current (deg)", (currentPos / TICKS_PER_DEGREE)%360);
             telemetry.addData("Error", error);
             telemetry.addData("P", P);
             telemetry.addData("D", D);
