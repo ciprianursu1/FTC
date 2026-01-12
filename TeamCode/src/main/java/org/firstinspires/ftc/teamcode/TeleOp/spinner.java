@@ -48,6 +48,8 @@ public class spinner extends LinearOpMode {
     DcMotor front_right;
     DcMotor back_left;
     DcMotor back_right;
+    boolean stepInProgress = false;
+    static final int TARGET_TOL = 10; // ticks tolerance; tune 5–20
 
     // Spinner PID
     static final double TICKS_PER_REV = 384.5;
@@ -214,9 +216,13 @@ public class spinner extends LinearOpMode {
 
             slots = rotateRight(slots);
 
-            // IMPORTANT: allow same-color next piece to trigger
-            lastStableColorSensor1 = 0;
+            // LATCH: prevent a second step until we reach the new target
+            stepInProgress = true;
+
+            // DO NOT reset lastStable to 0 anymore (this is what causes double-trigger)
+            // lastStableColorSensor1 = 0;   <-- remove this
         }
+
 
     }
 
@@ -331,14 +337,20 @@ public class spinner extends LinearOpMode {
                 slots = rotateLeft(slots);
                 lastStableColorSensor1 = 0;
             }
+            boolean atTarget = Math.abs(targetTicks - spinner.getCurrentPosition()) < TARGET_TOL;
 
-            // Update colors
-            boolean atTarget = Math.abs(targetTicks - spinner.getCurrentPosition()) < 10;
+// When we arrive at the target, the step is finished
+            if (atTarget) {
+                stepInProgress = false;
+            }
 
-            if (!sortingActive && !spinnerIsFull() && atTarget) {
+            if (atTarget) stepInProgress = false;
+
+            if (!sortingActive && !spinnerIsFull() && atTarget && !stepInProgress) {
                 updateAllSlots();
                 colorDrivenSpinnerLogic();
             }
+
 
 
             updateTelemetry();
