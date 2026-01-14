@@ -293,42 +293,57 @@ public class spinner extends LinearOpMode {
 
     public void runAiming() {
 
+        // IMU -> Limelight orientation (as you already had)
         YawPitchRollAngles ypr = imu.getRobotYawPitchRollAngles();
         limelight.updateRobotOrientation(ypr.getYaw());
 
         LLResult result = limelight.getLatestResult();
-        double tx = 0;
 
         long OraActuala = System.nanoTime();
 
         double dt = (OraActuala - lastTime) / 1e9;
         lastTime = OraActuala;
-        if (dt <= 0) return;
 
-        //cand targetul este in raza de actiune
+        // protectie dt (previne derivata enorma / div0)
+        if (dt <= 0) return;
+        if (dt < 0.005) dt = 0.005; // 5ms minim
+
+        // =========================
+        // 1) TARGET VALID -> PID
+        // =========================
         if (result != null && result.isValid()) {
             aVazutVreodataTarget = true;
-            tx = -result.getTx();
+
+            // folosim o singura conventie de semn:
+            // tx = result.getTx(); iar error = -tx
+            double tx = result.getTx();
             lastTx = tx;
+
             UltimaDataVazut = OraActuala;
             TimpDeLaPierdereaTargetului = 0;
+            ConditieScanarePlanetara = false;
 
             // Deadzone
             if (Math.abs(tx) <= txDeadzone) {
                 tureta.setPower(0);
                 integral = 0;
                 lastError = 0;
-                ConditieScanarePlanetara = false;
                 return;
             }
 
             // PID
             double error = -tx;
+
+            // integral cu clamp simplu (anti-windup minimal fara variabile noi)
             integral += error * dt;
+            integral = Range.clip(integral, -1.0, 1.0);
+
             double derivative = (error - lastError) / dt;
             lastError = error;
 
             double output = kP * error + kI * integral + kD * derivative;
+
+            // clamp + limitare mecanica (pastrezi ce ai deja)
             output = Range.clip(output, -0.5, 0.5);
             output = Limitare(output);
 
@@ -336,20 +351,30 @@ public class spinner extends LinearOpMode {
             return;
         }
 
-        //Cand tagetul incepe sa fie pierdut
+        // =========================
+        // 2) TARGET INVALID -> "pierdut"
+        // =========================
         double UltimaDataVazutSecunde = (OraActuala - UltimaDataVazut) / 1e9;
 
-        // Pauza
-        if (UltimaDataVazutSecunde <= TimpPauza) {
+        // Pauza dupa pierdere (daca a vazut recent)
+        if (aVazutVreodataTarget && UltimaDataVazutSecunde <= TimpPauza) {
             tureta.setPower(0);
             return;
         }
 
-        // Initializeaza timpul de cautare
-        if (TimpDeLaPierdereaTargetului == 0)
+        // Initializeaza "intrarea" in modul de cautare (o singura data)
+        if (TimpDeLaPierdereaTargetului == 0) {
             TimpDeLaPierdereaTargetului = OraActuala;
 
+            // reset PID ca sa nu revina cu integral vechi cand prinde iar target
+            integral = 0;
+            lastError = 0;
 
+            // fixeaza directia initiala dupa ultima eroare cunoscuta
+            // (daca tx > 0, targetul e in dreapta -> tureta trebuie sa mearga spre el,
+            // insa sensul motorului tau poate fi invers; ajustezi aici daca e cazul)
+            scanDir = lastTx > 0;
+        }
 
         // Cautare planetara
         ConditieScanarePlanetara = true;
@@ -357,18 +382,26 @@ public class spinner extends LinearOpMode {
         double PutereCautare;
 
         if (!aVazutVreodataTarget) {
-            // OSCILARE SIMPLA (stânga-dreapta)
+            // OSCILARE LINA (sinus), fara salturi (jitter mai mic decat signum)
             double t = (OraActuala / 1e9);
-            double dir = Math.signum(Math.sin(t * 0.8)); // ~0.8 Hz
+            double dir = Math.sin(t * 0.8); // ~0.8 rad/s (daca vrei ~0.8 Hz, inmultesti cu 2*pi)
             PutereCautare = Limitare(scanSpeed * dir);
         } else {
-            // direcție bazată pe ultima poziție cunoscută
-            scanDir = lastTx > 0;
-            PutereCautare = Limitare(scanSpeed * (scanDir ? 1 : -1));
+            // sweep: mentine directia initiala o perioada, apoi inverseaza
+            // folosim TimpDeLaPierdereaTargetului deja existent (fara variabile noi)
+            double tLost = (OraActuala - TimpDeLaPierdereaTargetului) / 1e9;
+
+            // inverseaza sensul la fiecare 1.5 secunde (ajustezi dupa preferinta)
+            // (cast la long ca sa putem folosi paritatea fara variabile noi)
+            boolean flip = (((long) (tLost / 1.5)) % 2L) == 1L;
+
+            boolean dirNow = flip ? !scanDir : scanDir;
+            PutereCautare = Limitare(scanSpeed * (dirNow ? 1 : -1));
         }
 
         tureta.setPower(PutereCautare);
-}
+    }
+
 
 
         private String arrayToString(int[] a) {
