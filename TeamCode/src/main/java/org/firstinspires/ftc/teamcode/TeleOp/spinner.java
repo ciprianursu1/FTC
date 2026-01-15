@@ -103,13 +103,11 @@ public class spinner extends LinearOpMode {
     // cautarea mai extinsa iar cautarea locala cea cu un range mai mic
     //pt prosti o trebuit sa scriu asta
     // scanning vars (keep your existing ones)
-    double scanSpeed = 0.15;
+    double scanSpeed = 0.3;
     boolean scanDir = true;
     double lastTx = 0;
     double txDeadzone = 3.5;
 
-    double DistantaPerete=0;
-    double LEFT_LIMIT = 20, RIGHT_LIMIT = -20;
     double DEG_PER_TICK = 360.0 / 560.0;
     boolean aVazutVreodataTarget = false;
     boolean outtake=false;
@@ -119,6 +117,7 @@ public class spinner extends LinearOpMode {
     double flywheelInput = 1.0;   // pretend "full speed"
     boolean finalMoveDone = false;
     double UnghiLansat=0;
+    boolean activtureta=false;
 
 
     private double logFlywheel(double x) {
@@ -151,9 +150,9 @@ public class spinner extends LinearOpMode {
 
 
     private void SetWheelsPower() {
-        double left_x = gamepad1.left_stick_x;
-        double left_y = -gamepad1.left_stick_y; // forward is negative
-        double right_x = gamepad1.right_stick_x;
+        double left_x = gamepad2.left_stick_x;
+        double left_y = -gamepad2.left_stick_y; // forward is negative
+        double right_x = gamepad2.right_stick_x;
 
         double front_left_pw = left_y + left_x + right_x;
         double back_left_pw = left_y - left_x + right_x;
@@ -318,7 +317,7 @@ public class spinner extends LinearOpMode {
 
 
     public void runAiming() {
-
+        if (!activtureta)return;
         YawPitchRollAngles ypr = imu.getRobotYawPitchRollAngles();
         limelight.updateRobotOrientation(ypr.getYaw());
 
@@ -350,18 +349,19 @@ public class spinner extends LinearOpMode {
                 return;
             }
 
+            // PID (daca merge invers, schimbi DOAR semnul aici)
             double error = tx;
 
             integral += error * dt;
             integral = Range.clip(integral, -1.0, 1.0);
 
-            double derivative = (error - lastError) / dt;
-            lastError = error;
+            double derivative = (error - lastErrorT) / dt;
+            lastErrorT = error;
 
             double output = kP * error + kI * integral + kD * derivative;
             output = Range.clip(output, -0.5, 0.5);
-            output = Limitare(output);
 
+            output = Limitare(output);
             tureta.setPower(output);
             return;
         }
@@ -383,38 +383,51 @@ public class spinner extends LinearOpMode {
             TimpDeLaPierdereaTargetului = OraActuala;
 
             integral = 0;
-            lastError = 0;
+            lastErrorT = 0;
 
-            if (aVazutVreodataTarget) {
-                // dupa pierdere -> mergi spre last known
-                scanDir = lastTx < 0;
-            } else {
-                // PRIMA ITERATIE EVER -> asuma STANGA
-                scanDir = false;
-            }
+            // dupa pierdere: incearca intai spre last known
+            if (aVazutVreodataTarget) scanDir = lastTx > 0;
+            else scanDir = false; // prima data: stanga
         }
 
         ConditieScanarePlanetara = true;
 
         // =========================
-        // 3) SWEEP WIDE PE LIMITE
+        // 3) SWEEP WIDE (DAR fara sa intre in zona interzisa)
         // =========================
-        double angleDeg = tureta.getCurrentPosition() * DEG_PER_TICK;
-
-        if (angleDeg >= RIGHT_LIMIT) scanDir = false;
-        else if (angleDeg <= LEFT_LIMIT) scanDir = true;
-
-        double PutereCautare = Limitare(scanSpeed * (scanDir ? 1 : -1));
+        double PutereCautare =Limitare(scanSpeed);
         tureta.setPower(PutereCautare);
     }
 
+    private double Limitare(double power) {
+        double angleDeg = tureta.getCurrentPosition() * DEG_PER_TICK;
+
+        // Limite hard
+        double LEFT_LIMIT = -150;
+        double RIGHT_LIMIT = 150;
+
+        // Daca ajungi la limita -> inversezi directia
+        if (angleDeg >= RIGHT_LIMIT) {
+            scanDir = false;   // mergi inapoi spre stanga
+        }
+        else if (angleDeg <= LEFT_LIMIT) {
+            scanDir = true;    // mergi inapoi spre dreapta
+        }
+
+        // Aplica directia corecta
+        double finalPower = Math.abs(power) * (scanDir ? 1 : -1);
+
+        return finalPower;
+    }
 
 
-        private String arrayToString(int[] a) {
+
+
+    private String arrayToString(int[] a) {
         return "[" + a[0] + ", " + a[1] + ", " + a[2] + "]";
     }
 
-    private void Lansare()
+    /*private void Lansare()
     {
         LLResult result = limelight.getLatestResult();
         double ty=result.getTy();
@@ -453,7 +466,7 @@ public class spinner extends LinearOpMode {
         //double PozitieLansare=(UnghiLansat-54.0)/(75.0-54.0);
 
        // UnghiLansare.setPosition(PozitieLansare);
-    }
+    }*/
 
 
     private void Sort() {
@@ -489,15 +502,6 @@ public class spinner extends LinearOpMode {
         telemetry.addLine("SORT FAILED: No matching orientation");
     }
 
-    private double Limitare(double power) {
-        double angleDeg = tureta.getCurrentPosition() * DEG_PER_TICK;
-
-        if (angleDeg <= RIGHT_LIMIT && power > 0) return 0;
-        if (angleDeg >= LEFT_LIMIT && power < 0) return 0;
-
-        return power;
-    }
-
     private void updateTelemetry() {
         telemetry.addData("Slot 1", slots2[0]);
         telemetry.addData("Slot 2", slots2[1]);
@@ -509,7 +513,7 @@ public class spinner extends LinearOpMode {
         telemetry.addData("kp",kP);
         telemetry.addData("kd",kD);
         telemetry.addData("unghiLansat",UnghiLansat);
-        telemetry.addData("Distanta Perete",DistantaPerete);
+     //        telemetry.addData("Distanta Perete",DistantaPerete);
         telemetry.update();
     }
 
@@ -555,7 +559,6 @@ public class spinner extends LinearOpMode {
 
         lastTime = System.nanoTime();
         pidTimer.reset();
-        ejector.setPosition(0.285);
 
         while (opModeIsActive()) {
 
@@ -685,8 +688,17 @@ public class spinner extends LinearOpMode {
 
             updateTelemetry();
             SetWheelsPower();
-            runAiming();
-            Lansare();
+            if (gamepad1.yWasPressed()) {
+                activtureta = !activtureta;
+            }
+
+            if (activtureta) {
+                runAiming();
+            } else {
+                tureta.setPower(0);
+            }
+
+            //Lansare();
 
             idle();
         }
