@@ -71,7 +71,7 @@ public class spinner extends LinearOpMode {
     // Spinner PID
     static final double TICKS_PER_REV = 384.5;
     static final double TICKS_PER_DEGREE = TICKS_PER_REV / 360.0;
-    double P = 0.0101;
+    double P = 0.046;
     double I = 0.0000;
     double D = 0.0015;
     double integralSum = 0;
@@ -95,7 +95,7 @@ public class spinner extends LinearOpMode {
     double PerioadaSchimbariiSensului=1;  //TO BE DETERMINED(empiric)
     Limelight3A limelight;
     IMU imu;
-    double kP = 0.0076, kI = 0.0001, kD = 0.00005;//pid tureta
+    double kP = 0.0076, kI = 0.0001, kD = 0.0005;//pid tureta
     double integral = 0, lastErrorT = 0;
     long lastTime = 0;
 
@@ -446,8 +446,8 @@ public class spinner extends LinearOpMode {
     private double Limitare(double power) {
         double angleDeg = tureta.getCurrentPosition() * DEG_PER_TICK;
 
-        if (angleDeg >= RIGHT_LIMIT && power > 0) return 0;
-        if (angleDeg <= LEFT_LIMIT && power < 0) return 0;
+        if (angleDeg <= RIGHT_LIMIT && power > 0) return 0;
+        if (angleDeg >= LEFT_LIMIT && power < 0) return 0;
 
         return power;
     }
@@ -458,6 +458,10 @@ public class spinner extends LinearOpMode {
         telemetry.addData("Slot 3", slots2[2]);;
         telemetry.addData("ColorPending", colorPending);
         telemetry.addData("unghi tureta",tureta.getCurrentPosition() * DEG_PER_TICK);
+        telemetry.addData("putere tureta",tureta.getPower());
+        telemetry.addData("tx",lastTx);
+        telemetry.addData("kp",kP);
+        telemetry.addData("kd",kD);
         telemetry.update();
     }
 
@@ -495,8 +499,8 @@ public class spinner extends LinearOpMode {
         spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         spinner.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
-        tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         tureta.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
 
         waitForStart();
@@ -521,14 +525,14 @@ public class spinner extends LinearOpMode {
                 i = 0; // resetează indexul pentru slots2
             }
 
-            if (gamepad1.dpadUpWasReleased()) {
+        /*    if (gamepad1.dpadUpWasReleased()) {
                 ejector.setPosition(0.285);
             } else if (gamepad1.dpadUpWasPressed()) {
                 ejector.setPosition(0.009);
             }
             if (gamepad1.shareWasPressed()) {
                 flywheelOn = !flywheelOn;
-            }
+            }*/
 
             double flywheelPower = flywheelOn ? logFlywheel(flywheelInput) : 0;
             flywheel.setPower(flywheelPower);
@@ -546,7 +550,7 @@ public class spinner extends LinearOpMode {
             // ---------------------------
             // CONTROL MANUAL SPINNER
             // ---------------------------
-            if (gamepad1.dpadRightWasPressed()) {
+       /*     if (gamepad1.dpadRightWasPressed()) {
                 targetTicks += (int) (120 * TICKS_PER_DEGREE);
                 // slots = rotateRight(slots2);
             }
@@ -554,7 +558,27 @@ public class spinner extends LinearOpMode {
             if (gamepad1.dpadLeftWasPressed()) {
                 targetTicks -= (int) (120 * TICKS_PER_DEGREE);
                 //slots = rotateLeft(slots2);
+            }*/
+
+            if (gamepad1.dpadUpWasPressed() ) {
+                kP += 0.0005;
             }
+
+            // D-pad DOWN → decrease P
+            if (gamepad1.dpadDownWasPressed() ) {
+                kP -= 0.0005;
+            }
+
+            // D-pad UP → increase P
+            if (gamepad1.dpadLeftWasPressed() ) {
+                kD += 0.0001;
+            }
+
+            // D-pad DOWN → decrease P
+            if (gamepad1.dpadRightWasPressed() ) {
+                kD -= 0.0001;
+            }
+
 
             double currentPos = spinner.getCurrentPosition();
             double error = targetTicks - currentPos;
