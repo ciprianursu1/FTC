@@ -18,11 +18,20 @@ import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 
 import java.util.Arrays;
 
+import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import com.pedropathing.follower.Follower;
+import com.pedropathing.geometry.BezierLine;
+import com.pedropathing.geometry.Pose;
+import com.pedropathing.paths.Path;
+import com.pedropathing.util.Timer;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 @TeleOp(name = "ColorDetection+cevaspinner")
 public class spinner extends LinearOpMode {
 
     // Timers
     ElapsedTime pidTimer = new ElapsedTime();
+    ElapsedTime outtakeTimer = new ElapsedTime();
     private ElapsedTime sortTimer = new ElapsedTime();
 
     // Color sensor memory
@@ -86,7 +95,7 @@ public class spinner extends LinearOpMode {
     double PerioadaSchimbariiSensului=1;  //TO BE DETERMINED(empiric)
     Limelight3A limelight;
     IMU imu;
-    double kP = 0.002, kI = 0.0001, kD = 0.0006;//pid tureta
+    double kP = 0.0076, kI = 0.0001, kD = 0.00005;//pid tureta
     double integral = 0, lastErrorT = 0;
     long lastTime = 0;
 
@@ -94,14 +103,27 @@ public class spinner extends LinearOpMode {
     // cautarea mai extinsa iar cautarea locala cea cu un range mai mic
     //pt prosti o trebuit sa scriu asta
     // scanning vars (keep your existing ones)
-    double scanSpeed = 0.05;
+    double scanSpeed = 0.15;
     boolean scanDir = true;
     double lastTx = 0;
     double txDeadzone = 3.5;
 
-    double LEFT_LIMIT = -100, RIGHT_LIMIT = 100;
+    double LEFT_LIMIT = 180, RIGHT_LIMIT = -70;
     double DEG_PER_TICK = 360.0 / 560.0;
     boolean aVazutVreodataTarget = false;
+    boolean outtake=false;
+    boolean sorted=false;
+    boolean intakeM=false;
+    boolean flywheelOn = false;
+    double flywheelInput = 1.0;   // pretend "full speed"
+
+    private double logFlywheel(double x) {
+        // Tunable constants
+        double a = 0.55;   // max power
+        double b = 4.0;    // curve aggressiveness
+
+        return a * Math.log(b * x + 1) / Math.log(b + 1);
+    }
 
 
 
@@ -293,7 +315,6 @@ public class spinner extends LinearOpMode {
 
     public void runAiming() {
 
-        // IMU -> Limelight orientation (as you already had)
         YawPitchRollAngles ypr = imu.getRobotYawPitchRollAngles();
         limelight.updateRobotOrientation(ypr.getYaw());
 
@@ -304,9 +325,8 @@ public class spinner extends LinearOpMode {
         double dt = (OraActuala - lastTime) / 1e9;
         lastTime = OraActuala;
 
-        // protectie dt (previne derivata enorma / div0)
         if (dt <= 0) return;
-        if (dt < 0.005) dt = 0.005; // 5ms minim
+        if (dt < 0.005) dt = 0.005;
 
         // =========================
         // 1) TARGET VALID -> PID
@@ -314,8 +334,6 @@ public class spinner extends LinearOpMode {
         if (result != null && result.isValid()) {
             aVazutVreodataTarget = true;
 
-            // folosim o singura conventie de semn:
-            // tx = result.getTx(); iar error = -tx
             double tx = result.getTx();
             lastTx = tx;
 
@@ -323,18 +341,13 @@ public class spinner extends LinearOpMode {
             TimpDeLaPierdereaTargetului = 0;
             ConditieScanarePlanetara = false;
 
-            // Deadzone
             if (Math.abs(tx) <= txDeadzone) {
                 tureta.setPower(0);
-                integral = 0;
-                lastError = 0;
                 return;
             }
 
-            // PID
-            double error = -tx;
+            double error = tx;
 
-            // integral cu clamp simplu (anti-windup minimal fara variabile noi)
             integral += error * dt;
             integral = Range.clip(integral, -1.0, 1.0);
 
@@ -342,8 +355,6 @@ public class spinner extends LinearOpMode {
             lastError = error;
 
             double output = kP * error + kI * integral + kD * derivative;
-
-            // clamp + limitare mecanica (pastrezi ce ai deja)
             output = Range.clip(output, -0.5, 0.5);
             output = Limitare(output);
 
@@ -352,53 +363,44 @@ public class spinner extends LinearOpMode {
         }
 
         // =========================
-        // 2) TARGET INVALID -> "pierdut"
+        // 2) TARGET INVALID
         // =========================
         double UltimaDataVazutSecunde = (OraActuala - UltimaDataVazut) / 1e9;
 
-        // Pauza dupa pierdere (daca a vazut recent)
         if (aVazutVreodataTarget && UltimaDataVazutSecunde <= TimpPauza) {
             tureta.setPower(0);
             return;
         }
 
-        // Initializeaza "intrarea" in modul de cautare (o singura data)
+        // =========================
+        // INIT SCAN (o singura data)
+        // =========================
         if (TimpDeLaPierdereaTargetului == 0) {
             TimpDeLaPierdereaTargetului = OraActuala;
 
-            // reset PID ca sa nu revina cu integral vechi cand prinde iar target
             integral = 0;
             lastError = 0;
 
-            // fixeaza directia initiala dupa ultima eroare cunoscuta
-            // (daca tx > 0, targetul e in dreapta -> tureta trebuie sa mearga spre el,
-            // insa sensul motorului tau poate fi invers; ajustezi aici daca e cazul)
-            scanDir = lastTx > 0;
+            if (aVazutVreodataTarget) {
+                // dupa pierdere -> mergi spre last known
+                scanDir = lastTx < 0;
+            } else {
+                // PRIMA ITERATIE EVER -> asuma STANGA
+                scanDir = false;
+            }
         }
 
-        // Cautare planetara
         ConditieScanarePlanetara = true;
 
-        double PutereCautare;
+        // =========================
+        // 3) SWEEP WIDE PE LIMITE
+        // =========================
+        double angleDeg = tureta.getCurrentPosition() * DEG_PER_TICK;
 
-        if (!aVazutVreodataTarget) {
-            // OSCILARE LINA (sinus), fara salturi (jitter mai mic decat signum)
-            double t = (OraActuala / 1e9);
-            double dir = Math.sin(t * 0.8); // ~0.8 rad/s (daca vrei ~0.8 Hz, inmultesti cu 2*pi)
-            PutereCautare = Limitare(scanSpeed * dir);
-        } else {
-            // sweep: mentine directia initiala o perioada, apoi inverseaza
-            // folosim TimpDeLaPierdereaTargetului deja existent (fara variabile noi)
-            double tLost = (OraActuala - TimpDeLaPierdereaTargetului) / 1e9;
+        if (angleDeg >= RIGHT_LIMIT) scanDir = false;
+        else if (angleDeg <= LEFT_LIMIT) scanDir = true;
 
-            // inverseaza sensul la fiecare 1.5 secunde (ajustezi dupa preferinta)
-            // (cast la long ca sa putem folosi paritatea fara variabile noi)
-            boolean flip = (((long) (tLost / 1.5)) % 2L) == 1L;
-
-            boolean dirNow = flip ? !scanDir : scanDir;
-            PutereCautare = Limitare(scanSpeed * (dirNow ? 1 : -1));
-        }
-
+        double PutereCautare = Limitare(scanSpeed * (scanDir ? 1 : -1));
         tureta.setPower(PutereCautare);
     }
 
@@ -409,7 +411,7 @@ public class spinner extends LinearOpMode {
     }
 
     private void Sort() {
-        if (!gamepad1.yWasPressed()) return;
+      //  if (!gamepad1.yWasPressed()) return;
         if (spinnerMoving) return; // don't interrupt motion
 
         // Already sorted
@@ -453,11 +455,9 @@ public class spinner extends LinearOpMode {
     private void updateTelemetry() {
         telemetry.addData("Slot 1", slots2[0]);
         telemetry.addData("Slot 2", slots2[1]);
-        telemetry.addData("Slot 3", slots2[2]);
-        telemetry.addData("Pregatit de lansare", spinnerBusy);
-        telemetry.addData("TargetTicks", targetTicks);
-        telemetry.addData("SpinnerPos", spinner.getCurrentPosition());
+        telemetry.addData("Slot 3", slots2[2]);;
         telemetry.addData("ColorPending", colorPending);
+        telemetry.addData("unghi tureta",tureta.getCurrentPosition() * DEG_PER_TICK);
         telemetry.update();
     }
 
@@ -496,6 +496,7 @@ public class spinner extends LinearOpMode {
         spinner.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
         tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
 
         waitForStart();
@@ -513,6 +514,7 @@ public class spinner extends LinearOpMode {
                 slots2[0] = 0;
                 slots2[1] = 0;
                 slots2[2] = 0;
+                intakeM=true;
             }
             if (gamepad1.psWasPressed()) {
                 intake.setPower(0);
@@ -525,11 +527,12 @@ public class spinner extends LinearOpMode {
                 ejector.setPosition(0.009);
             }
             if (gamepad1.shareWasPressed()) {
-                flywheel.setPower(0.55);
+                flywheelOn = !flywheelOn;
             }
-            if (gamepad1.shareWasPressed()) {
-                flywheel.setPower(0);
-            }
+
+            double flywheelPower = flywheelOn ? logFlywheel(flywheelInput) : 0;
+            flywheel.setPower(flywheelPower);
+
             if (gamepad1.squareWasPressed()) {
                 targetTicks += (int) (60 * TICKS_PER_DEGREE);
             }
@@ -569,7 +572,7 @@ public class spinner extends LinearOpMode {
             }
 
 
-            if (!spinnerIsFull() && !spinnerMoving) {
+            if (!spinnerIsFull() && !spinnerMoving && !outtake) {
                 updateAllSlots();
                 if (waitingForClear && slots[0] == 0) {
                     waitingForClear = false;
@@ -579,11 +582,34 @@ public class spinner extends LinearOpMode {
                 colorDrivenSpinnerLogic();
             }
 
+            if (spinnerIsFull()) {
+                if (!outtake && intakeM) { // first time entering full state
+                    outtake = true;
+                    outtakeTimer.reset();
+                    sorted = false;
+                }
+
+                // wait 500 ms BEFORE sorting
+                if (!sorted && outtakeTimer.milliseconds() >= 1500) {
+                    Sort();
+                    sorted = true;
+                }
+                outtakeTimer.reset();
+
+                // wait ANOTHER 500 ms before moving spinner
+                if (sorted && outtakeTimer.milliseconds() >= 1500) {
+                    targetTicks -= (int) (30 * TICKS_PER_DEGREE);
+                }
+            } else {
+                outtake = false;
+                sorted = false;
+                intakeM = false;
+            }
+
 
             updateTelemetry();
             SetWheelsPower();
             runAiming();
-            Sort();
 
 
             idle();

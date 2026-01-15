@@ -29,7 +29,7 @@ public class PIDtunner extends LinearOpMode {
     @Override
     public void runOpMode() {
 
-        spinner = hardwareMap.get(DcMotorEx.class, "spinner");
+        spinner = hardwareMap.get(DcMotorEx.class, "tureta");
 
         spinner.setDirection(DcMotorSimple.Direction.FORWARD);
         spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
@@ -45,15 +45,16 @@ public class PIDtunner extends LinearOpMode {
         while (opModeIsActive()) {
 
             // Target positions
-            //if (gamepad1.aWasPressed()) {
-              //  targetTicks = (int)(60 * TICKS_PER_DEGREE);
-           // }
-            if (gamepad1.bWasPressed()) {
+            if (gamepad1.squareWasPressed()) {
+                targetTicks = (int)(60 * TICKS_PER_DEGREE);
+            }
+            if (gamepad1.circleWasPressed()) {
+                targetTicks = (int)(30 * TICKS_PER_DEGREE);
+            }
+            if (gamepad1.yWasPressed()) {
                 targetTicks = 0;
             }
-            if (gamepad1.xWasPressed()) {
-                targetTicks =targetTicks + (int)(120 * TICKS_PER_DEGREE);
-            }
+
 
             if (gamepad1.dpadUpWasPressed() ) {
                 P += 0.0005;
