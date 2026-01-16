@@ -82,7 +82,7 @@ public class spinner extends LinearOpMode {
     boolean wasFull = false;
 
     double lastError = 0;
-    int targetTicks = 0;
+    double targetTicks = 0;
 
     // Color detection timing
     long colorStartTime = 0;
@@ -123,6 +123,7 @@ public class spinner extends LinearOpMode {
     boolean flywheelOn = false;
     double flywheelInput = 1.0;   // pretend "full speed"
     boolean finalMoveDone = false;
+    double DistantaPerete=0;
     double UnghiLansat=0;
     boolean activtureta=false;
     int mingi=0;
@@ -133,7 +134,8 @@ public class spinner extends LinearOpMode {
     boolean Empty=false;
   //  DigitalChannel limit;
     Boolean Home=false;
-    TouchSensor limit;
+    TouchSensor limitswitch;
+    boolean reset=false;
 
     int ballsToOuttake = 3;   // or however many
     int ballsOuttaken = 0;
@@ -158,6 +160,7 @@ public class spinner extends LinearOpMode {
 
         return a * Math.log(b * x + 1) / Math.log(b + 1);
     }
+
 
 
     private void simpleOuttake() {
@@ -196,7 +199,7 @@ public class spinner extends LinearOpMode {
         // STEP 3: ROTATE SPINNER
         // --------------------
         if (ejectClose && outtakeStepTimer.seconds() >= 1.0 && !spinnerMoving) {
-            targetTicks += (int)(120 * TICKS_PER_DEGREE);
+            targetTicks += (120 * TICKS_PER_DEGREE);
             rotateSlotsRight();
             spinnerMoving = true;
 
@@ -352,7 +355,7 @@ public class spinner extends LinearOpMode {
             colorPending = true;
         }
         if (colorPending && System.currentTimeMillis() - colorStartTime >= 10) {
-            targetTicks += (int) (120 * TICKS_PER_DEGREE);
+            targetTicks +=  (120 * TICKS_PER_DEGREE);
             spinnerMoving = true;
             detectionLocked = true;
             colorPending = false;
@@ -513,7 +516,7 @@ public class spinner extends LinearOpMode {
         double angleToGoalRadians = angleToGoalDegrees * (3.14159 / 180.0);
 
         //calculate distance
-        double DistantaPerete=(goalHeightCM - limelightLensHeightCM) / Math.tan(angleToGoalRadians);
+        DistantaPerete=(goalHeightCM - limelightLensHeightCM) / Math.tan(angleToGoalRadians);
         double InaltimePerete=98.5;
         double InaltimeTarget=119;
         double DistantaTarget=DistantaPerete+45;
@@ -545,7 +548,7 @@ public class spinner extends LinearOpMode {
         // Already sorted
         if (Arrays.equals(slots2, totem)) return;
 
-        int stepTicks = (int) (120 * TICKS_PER_DEGREE);
+        double stepTicks = (double) (120 * TICKS_PER_DEGREE);
 
         // Try rotating right
         rotateSlotsRight();
@@ -580,10 +583,10 @@ public class spinner extends LinearOpMode {
         telemetry.addData("unghi tureta",tureta.getCurrentPosition() * DEG_PER_TICK);
         telemetry.addData("putere tureta",tureta.getPower());
         telemetry.addData("tx",lastTx);
-        telemetry.addData("kp",kP);
-        telemetry.addData("kd",kD);
-        telemetry.addData("unghiLansat",UnghiLansat);
-        telemetry.addData("atingeriSenSor",atingeriSenzor);
+        telemetry.addData("spinner unghi",spinner.getCurrentPosition()*DEG_PER_TICK);
+      //  telemetry.addData("DistantaTarget", DistantaPerete);
+      //  telemetry.addData("unghiLansat",UnghiLansat);
+    //    telemetry.addData("atingeriSenSor",atingeriSenzor);
      //   limit = hardwareMap.get(DigitalChannel.class, "limit");
        // limit.setMode(DigitalChannel.Mode.INPUT);
      //        telemetry.addData("Distanta Perete",DistantaPerete);
@@ -619,7 +622,7 @@ public class spinner extends LinearOpMode {
         ejector = hardwareMap.get(Servo.class, "ejector");
         tureta = hardwareMap.get(DcMotorEx.class, "tureta");
         flywheel = hardwareMap.get(DcMotor.class, "flywheel");
-        limit = hardwareMap.get(TouchSensor.class, "limit");
+        limitswitch = hardwareMap.get(TouchSensor.class, "limitswitch");
 
         spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -673,11 +676,11 @@ public class spinner extends LinearOpMode {
             else flywheel.setPower(0);
 
             if (gamepad1.squareWasPressed()) {
-                targetTicks -= (int) (60 * TICKS_PER_DEGREE);
+                targetTicks +=  (60 * TICKS_PER_DEGREE);
             }
 
             if (gamepad1.rightBumperWasPressed()) {
-                targetTicks += (int) (30 * TICKS_PER_DEGREE);
+                targetTicks +=  (30 * TICKS_PER_DEGREE);
             }
 
 
@@ -685,12 +688,12 @@ public class spinner extends LinearOpMode {
             // CONTROL MANUAL SPINNER
             // ---------------------------
             if (gamepad1.dpadRightWasPressed()) {
-                targetTicks += (int) (120 * TICKS_PER_DEGREE);
+                targetTicks +=  (120 * TICKS_PER_DEGREE);
                 rotateSlotsRight();
             }
 
             if (gamepad1.dpadLeftWasPressed()) {
-                targetTicks -= (int) (120 * TICKS_PER_DEGREE);
+                targetTicks -=  (120 * TICKS_PER_DEGREE);
                 rotateSlotsLeft();
             }
             if (gamepad1.leftBumperWasPressed()) {
@@ -707,7 +710,7 @@ public class spinner extends LinearOpMode {
             lastError = error;
             double pidOutput = error * P + integralSum * I + derivative * D;
             pidOutput = Math.max(-0.5, Math.min(0.5, pidOutput));
-            spinner.setPower(pidOutput);
+            if(!reset)spinner.setPower(pidOutput);
 
             if (Math.abs(error) < 50 && Math.abs(pidOutput) < 0.05) {
                 spinnerMoving = false;
@@ -756,7 +759,7 @@ public class spinner extends LinearOpMode {
                         && outtakeStepTimer.milliseconds() >= 7000
                         && !finalMoveDone
                 ) {
-                    targetTicks += (int) (60 * TICKS_PER_DEGREE);
+                    targetTicks +=  (60 * TICKS_PER_DEGREE);
                     spinnerMoving = true;
                     finalMoveDone = true;
                 }
@@ -771,13 +774,26 @@ public class spinner extends LinearOpMode {
                 spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
                 I=0;
             }*/
-            if (gamepad1.touchpadWasPressed()) {
-                targetTicks += (int)(60 * TICKS_PER_DEGREE);
-                if (limit.isPressed()) {
+            if (gamepad1.touchpadWasPressed()) reset = true;
+
+            if (gamepad1.touchpadWasPressed()) reset = true;
+
+            if (reset) {
+                spinner.setPower(0.15);  // move slowly toward limit switch
+                if (limitswitch.isPressed()) {
+                    spinner.setPower(0);  // stop motor
                     spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-                    I=0;
+                    spinner.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                    targetTicks = 0;      // reset PID target
+                    integralSum = 0;      // reset PID integral
+                    lastError = 0;        // reset PID derivative
+                    reset = false;        // done resetting
+                    targetTicks -=  (5 * TICKS_PER_DEGREE);
+                    telemetry.addData("senzor",limitswitch.isPressed());
                 }
             }
+
+
 
 
 
