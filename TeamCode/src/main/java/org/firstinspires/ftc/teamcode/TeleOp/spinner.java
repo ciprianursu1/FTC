@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.TeleOp;
 
+import android.text.method.Touch;
+
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
@@ -9,8 +11,10 @@ import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.TouchSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
@@ -35,7 +39,7 @@ public class spinner extends LinearOpMode {
     private ElapsedTime sortTimer = new ElapsedTime();
 
     // Color sensor memory
-    int[] last5Sensor1 = new int[5];
+    int[] last5Sensor1 = new int[10];
     int indexSensor1 = 0;
 
     // Spinner slots
@@ -75,6 +79,8 @@ public class spinner extends LinearOpMode {
     double I = 0.0000;
     double D = 0.0015;
     double integralSum = 0;
+    boolean wasFull = false;
+
     double lastError = 0;
     int targetTicks = 0;
 
@@ -98,7 +104,6 @@ public class spinner extends LinearOpMode {
     double kP = 0.0076, kI = 0.0001, kD = 0.0005;//pid tureta
     double integral = 0, lastErrorT = 0;
     long lastTime = 0;
-    int outtakeCycles = 0;
 
 
     boolean ConditieScanarePlanetara =false;//cautare planeta inseamna
@@ -126,6 +131,23 @@ public class spinner extends LinearOpMode {
     boolean ejecting = false;
     ElapsedTime ejectTimer = new ElapsedTime();
     boolean Empty=false;
+  //  DigitalChannel limit;
+    Boolean Home=false;
+    TouchSensor limit;
+
+    int ballsToOuttake = 3;   // or however many
+    int ballsOuttaken = 0;
+    // Outtake simple control
+    boolean outtakeActive = false;
+    boolean ejectOpen = false;
+    boolean ejectClose = false;
+    boolean rotating = false;
+
+    ElapsedTime outtakeStepTimer = new ElapsedTime();
+    int atingeriSenzor=0;
+
+
+
 
 
 
@@ -135,6 +157,64 @@ public class spinner extends LinearOpMode {
         double b = 4.0;    // curve aggressiveness
 
         return a * Math.log(b * x + 1) / Math.log(b + 1);
+    }
+
+
+    private void simpleOuttake() {
+
+        if (!outtakeActive) return;
+        // --------------------
+        // DONE
+        // --------------------
+        if (ballsOuttaken >= ballsToOuttake) {
+            outtakeActive = false;
+            return;
+        }
+
+        // --------------------
+        // STEP 1: OPEN EJECTOR
+        // --------------------
+        if (!ejectOpen && !ejectClose && !rotating) {
+            ejector.setPosition(0.005);
+            outtakeStepTimer.reset();
+            ejectOpen = true;
+            return;
+        }
+
+        // --------------------
+        // STEP 2: CLOSE EJECTOR
+        // --------------------
+        if (ejectOpen && outtakeStepTimer.seconds() >= 1.0) {
+            ejector.setPosition(0.285);
+            outtakeStepTimer.reset();
+            ejectOpen = false;
+            ejectClose = true;
+            return;
+        }
+
+        // --------------------
+        // STEP 3: ROTATE SPINNER
+        // --------------------
+        if (ejectClose && outtakeStepTimer.seconds() >= 1.0 && !spinnerMoving) {
+            targetTicks += (int)(120 * TICKS_PER_DEGREE);
+            rotateSlotsRight();
+            spinnerMoving = true;
+
+            ballsOuttaken++;
+
+            ejectClose = false;
+            rotating = true;
+            return;
+        }
+
+        // --------------------
+        // STEP 4: WAIT FOR ROTATION
+        // --------------------
+        if (rotating && outtakeStepTimer.seconds() > 1.5) {
+            spinnerMoving = false;
+            rotating = false;
+        }
+
     }
 
 
@@ -159,9 +239,9 @@ public class spinner extends LinearOpMode {
 
 
     private void SetWheelsPower() {
-        double left_x = gamepad1.left_stick_x;
-        double left_y = -gamepad1.left_stick_y; // forward is negative
-        double right_x = gamepad1.right_stick_x;
+        double left_x = gamepad2.left_stick_x;
+        double left_y = -gamepad2.left_stick_y; // forward is negative
+        double right_x = gamepad2.right_stick_x;
 
         double front_left_pw = left_y + left_x + right_x;
         double back_left_pw = left_y - left_x + right_x;
@@ -214,8 +294,10 @@ public class spinner extends LinearOpMode {
 
         if (alpha<100 && (h==150 || h==144) ) detected = 0;
         else if ((h > 215) || (alpha<100 && (h==160 || h==180))) detected = 2;
-        else if (h > 135 && h < 160 && alpha>60) detected = 1;
-        else if ((h==210 || h==220 || h==225 || h==200) && alpha<100) detected = 2;
+        //else if (h > 135 && h < 160 && alpha>100) detected = 1;
+        else if((h==140 || h==145) &&  alpha==43) detected = 0;
+        else if (h > 135 && h < 160 && alpha>60)detected =1;
+        else if ((h==210 || h==220 || h==225 || h==200) && alpha<100) detected=2;
         else detected = 0;
 
         return detected;
@@ -224,7 +306,7 @@ public class spinner extends LinearOpMode {
     private int processSingleSensor(ColorSensor sensor, int[] last5, int index) {
         int detected = smekerie(sensor);
         last5[index] = detected;
-        index = (index + 1) % 5;
+        index = (index + 1) % 10;
 
         int count1 = 0; // green
         int count2 = 0; // purple
@@ -235,8 +317,8 @@ public class spinner extends LinearOpMode {
         }
 
         int finalColor = 0;
-        if (count1 >= 3 && count1 > count2) finalColor = 1;
-        else if (count2 >= 3 && count2 > count1) finalColor = 2;
+        if (count1 >= 6 && count1 > count2) finalColor = 1;
+        else if (count2 >= 6 && count2 > count1) finalColor = 2;
 
         return finalColor;
     }
@@ -244,41 +326,13 @@ public class spinner extends LinearOpMode {
 
     private void updateAllSlots() {
         slots[0] = processSingleSensor(colorsensorSLot1, last5Sensor1, indexSensor1);
-        indexSensor1 = (indexSensor1 + 1) % 5;
-        // slots[1] = processSingleSensor(colorsensorSLot2, last5Sensor2, indexSensor2);
-        // slots[2] = processSingleSensor(colorsensorSLot3, last5Sensor3, indexSensor3);
+        indexSensor1 = (indexSensor1 + 1) % 10;
     }
 
     private boolean spinnerIsFull() {
         return slots2[0] != 0 && slots2[1] != 0 && slots2[2] != 0;
     }
 
-    private boolean spinnerIsEmpty() {
-        return slots2[0] == 0 && slots2[1] == 0 && slots2[2] == 0;
-    }
-
-
-    /* if (alpha<100 && (h==150 || h==144) ){
-        return "Negru";
-    }
-        else if ((h > 215) || (alpha<100 && (h==160 || h==180))) {
-        return "Magenta";
-    }
-        else if((h==140 || h==145) &&  alpha==43) {
-        return "Negru";
-    }
-
-        else if (h > 135 && h < 160 && alpha>60) {
-        return "Green";
-    }
-        else if ((h==210 || h==220 || h==225 || h==200) && alpha<100)//210 220 225 200
-            return "magenta gaura";
-        else
-    {
-        return "Negru";
-    }
-}
- */
 
     private void colorDrivenSpinnerLogic() {
         // Block NEW detections only
@@ -441,13 +495,13 @@ public class spinner extends LinearOpMode {
         return "[" + a[0] + ", " + a[1] + ", " + a[2] + "]";
     }
 
-    /*private void Lansare()
+    private void Lansare()
     {
         LLResult result = limelight.getLatestResult();
         double ty=result.getTy();
 
         // how many degrees back is your limelight rotated from perfectly vertical?
-        double limelightMountAngleDegrees = 25.0;
+        double limelightMountAngleDegrees = 15.0;
 
         // distance from the center of the Limelight lens to the floor
         double limelightLensHeightCM = 31.5;
@@ -459,7 +513,7 @@ public class spinner extends LinearOpMode {
         double angleToGoalRadians = angleToGoalDegrees * (3.14159 / 180.0);
 
         //calculate distance
-        DistantaPerete=(goalHeightCM - limelightLensHeightCM) / Math.tan(angleToGoalRadians);
+        double DistantaPerete=(goalHeightCM - limelightLensHeightCM) / Math.tan(angleToGoalRadians);
         double InaltimePerete=98.5;
         double InaltimeTarget=119;
         double DistantaTarget=DistantaPerete+45;
@@ -470,7 +524,7 @@ public class spinner extends LinearOpMode {
         double k=(DistantaTarget*(InaltimePerete-InaltimeRobot)-DistantaPerete*(InaltimeTarget-InaltimeRobot))/(DistantaTarget*DistantaPerete*(DistantaTarget-DistantaPerete));
         double u=(DistantaTarget*DistantaTarget*(DistantaPerete-DistantaTarget)-DistantaPerete*DistantaPerete*(InaltimeTarget-InaltimeRobot))/(DistantaTarget*DistantaPerete*(DistantaTarget-DistantaPerete));
 
-        double UnghiLansat=Math.toDegrees(Math.atan(u));
+        UnghiLansat=Math.toDegrees(Math.atan(u));
 
         //54grade limita inferioare de lansare din flywheel
         //75 grade limita superioara de lansare din flywheel
@@ -480,7 +534,8 @@ public class spinner extends LinearOpMode {
         //double PozitieLansare=(UnghiLansat-54.0)/(75.0-54.0);
 
        // UnghiLansare.setPosition(PozitieLansare);
-    }*/
+    }
+
 
 
     private void Sort() {
@@ -516,6 +571,7 @@ public class spinner extends LinearOpMode {
         telemetry.addLine("SORT FAILED: No matching orientation");
     }
 
+
     private void updateTelemetry() {
         telemetry.addData("Slot 1", slots2[0]);
         telemetry.addData("Slot 2", slots2[1]);
@@ -527,6 +583,9 @@ public class spinner extends LinearOpMode {
         telemetry.addData("kp",kP);
         telemetry.addData("kd",kD);
         telemetry.addData("unghiLansat",UnghiLansat);
+        telemetry.addData("atingeriSenSor",atingeriSenzor);
+     //   limit = hardwareMap.get(DigitalChannel.class, "limit");
+       // limit.setMode(DigitalChannel.Mode.INPUT);
      //        telemetry.addData("Distanta Perete",DistantaPerete);
         telemetry.update();
     }
@@ -560,6 +619,7 @@ public class spinner extends LinearOpMode {
         ejector = hardwareMap.get(Servo.class, "ejector");
         tureta = hardwareMap.get(DcMotorEx.class, "tureta");
         flywheel = hardwareMap.get(DcMotor.class, "flywheel");
+        limit = hardwareMap.get(TouchSensor.class, "limit");
 
         spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -586,25 +646,22 @@ public class spinner extends LinearOpMode {
                 slots2[1] = 0;
                 slots2[2] = 0;
                 intakeM = true;
+            }
 
-                outtakeCycles++;
-
-                // FIRST time → allow normal outtake +60
-                if (outtakeCycles > 1) {
-                    // SECOND and later → undo previous +60
-                    targetTicks -= (int) (60 * TICKS_PER_DEGREE);
-                }
+            if (gamepad1.dpadDownWasPressed())
+            {
+                intake.setPower(1);
             }
 
             if (gamepad1.psWasPressed()) {
                 intake.setPower(0);
-                i = 0; // resetează indexul pentru slots2
+             //   i = 0; // resetează indexul pentru slots2
             }
 
             if (gamepad1.optionsWasReleased()) {
                 ejector.setPosition(0.285);
             } else if (gamepad1.optionsWasPressed()) {
-                    ejector.setPosition(0.005);
+                ejector.setPosition(0.005);
 
             }
             if (gamepad1.shareWasPressed()) {
@@ -612,15 +669,14 @@ public class spinner extends LinearOpMode {
             }
 
             double flywheelPower = flywheelOn ? logFlywheel(flywheelInput) : 0;
-            if (flywheelOn)flywheel.setPower(0.55);
+            if (flywheelOn) flywheel.setPower(0.55);
             else flywheel.setPower(0);
 
             if (gamepad1.squareWasPressed()) {
                 targetTicks -= (int) (60 * TICKS_PER_DEGREE);
             }
 
-            if (gamepad1.rightBumperWasPressed())
-            {
+            if (gamepad1.rightBumperWasPressed()) {
                 targetTicks += (int) (30 * TICKS_PER_DEGREE);
             }
 
@@ -630,32 +686,18 @@ public class spinner extends LinearOpMode {
             // ---------------------------
             if (gamepad1.dpadRightWasPressed()) {
                 targetTicks += (int) (120 * TICKS_PER_DEGREE);
-                // slots = rotateRight(slots2);
+                rotateSlotsRight();
             }
 
             if (gamepad1.dpadLeftWasPressed()) {
                 targetTicks -= (int) (120 * TICKS_PER_DEGREE);
-                //slots = rotateLeft(slots2);
+                rotateSlotsLeft();
+            }
+            if (gamepad1.leftBumperWasPressed()) {
+                outtakeActive = true;
             }
 
-       /*     if (gamepad1.dpadUpWasPressed() ) {
-                kP += 0.0005;
-            }
 
-            // D-pad DOWN → decrease P
-            if (gamepad1.dpadDownWasPressed() ) {
-                kP -= 0.0005;
-            }
-
-            // D-pad UP → increase P
-            if (gamepad1.dpadLeftWasPressed() ) {
-                kD += 0.0001;
-            }
-
-            // D-pad DOWN → decrease P
-            if (gamepad1.dpadRightWasPressed() ) {
-                kD -= 0.0001;
-            }*/
 
 
             double currentPos = spinner.getCurrentPosition();
@@ -667,59 +709,78 @@ public class spinner extends LinearOpMode {
             pidOutput = Math.max(-0.5, Math.min(0.5, pidOutput));
             spinner.setPower(pidOutput);
 
-            if (Math.abs(error) < 20) {
+            if (Math.abs(error) < 50 && Math.abs(pidOutput) < 0.05) {
                 spinnerMoving = false;
                 detectionLocked = false;   // 🔓 UNLOCK HERE
                 lastStableColorSensor1 = 0;
             }
 
+            // ---------------------------
+// START OUTTAKE WHEN FULL (ONE-SHOT)
+// ---------------------------
+            if (spinnerIsFull() && !wasFull && !outtakeActive) {
+                outtakeActive = true;
 
-            if (!spinnerIsFull() && !spinnerMoving && !outtake) {
+                ballsOuttaken = 0;
+                ejectOpen = false;
+                ejectClose = false;
+                rotating = false;
+
+                sorted = false;
+                finalMoveDone = false;
+
+                outtakeStepTimer.reset();
+            }
+
+
+            if (!spinnerIsFull() && !spinnerMoving && !outtakeActive) {
                 updateAllSlots();
+
                 if (waitingForClear && slots[0] == 0) {
                     waitingForClear = false;
-                    lastStableColorSensor1 = 0; // re-arm only after clear
+                    lastStableColorSensor1 = 0;
                 }
 
                 colorDrivenSpinnerLogic();
             }
 
-            if (spinnerIsFull()) {
-                if (!outtake && intakeM) { // first time entering full state
-                    outtake = true;
-                    outtakeTimer.reset();
-                    sorted = false;
-                    finalMoveDone = false;
-                }
 
-                // wait 1500 ms BEFORE sorting
-                if (!sorted && outtakeTimer.milliseconds() >= 1500) {
+            if (spinnerIsFull()) {
+
+                if (!sorted && outtakeStepTimer.milliseconds() >= 3500) {
                     Sort();
                     sorted = true;
                 }
 
-                // wait ANOTHER 2500 ms (total 4000 ms) before moving spinner
                 if (sorted
-                        && outtakeTimer.milliseconds() >= 4000
+                        && outtakeStepTimer.milliseconds() >= 7000
                         && !finalMoveDone
-                        && outtakeCycles <= 1) {   // 🔒 ONLY FIRST CIRCLE
-
+                ) {
                     targetTicks += (int) (60 * TICKS_PER_DEGREE);
                     spinnerMoving = true;
                     finalMoveDone = true;
                 }
 
             } else {
-                outtake = false;
                 sorted = false;
-                intakeM = false;
-                outtakeCycles = 0;
+            }
+
+            /*if (limit.isPressed())atingeriSenzor= (atingeriSenzor+1)%5;
+            if (atingeriSenzor==0)
+            {
+                spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                I=0;
+            }*/
+            if (gamepad1.touchpadWasPressed()) {
+                targetTicks += (int)(60 * TICKS_PER_DEGREE);
+                if (limit.isPressed()) {
+                    spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                }
             }
 
 
 
-
-            updateTelemetry();
+                updateTelemetry();
             SetWheelsPower();
             if (gamepad1.yWasPressed()) {
                 activtureta = !activtureta;
@@ -727,14 +788,16 @@ public class spinner extends LinearOpMode {
 
             if (activtureta) {
                 runAiming();
+                Lansare();
             } else {
                 tureta.setPower(0);
             }
-
-            //Lansare();
+            simpleOuttake();
+            wasFull = spinnerIsFull();
 
             idle();
+            if (!spinnerMoving) integralSum = 0;
         }
-
+//Tibichi:ce ai avut cu functia lansare in contextu in care nu facea nimic fizic pe robot :(
     }
 }

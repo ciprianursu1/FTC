@@ -29,7 +29,7 @@ public class PIDtunner extends LinearOpMode {
     @Override
     public void runOpMode() {
 
-        spinner = hardwareMap.get(DcMotorEx.class, "tureta");
+        spinner = hardwareMap.get(DcMotorEx.class, "spinner");
 
         spinner.setDirection(DcMotorSimple.Direction.FORWARD);
         spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
