@@ -42,6 +42,7 @@ public class spinner extends LinearOpMode {
     int[] last5Sensor1 = new int[10];
     int indexSensor1 = 0;
 
+    int encoderOffset=0;
     // Spinner slots
     int[] slots = new int[3];
     int[] slots2 = new int[3];
@@ -237,7 +238,7 @@ public class spinner extends LinearOpMode {
 
     private int getSpinnerStep() {
         int stepTicks = (int) (120 * TICKS_PER_DEGREE);
-        return Math.round((float) spinner.getCurrentPosition() / stepTicks);
+        return Math.round((float) getSpinnerPositionCorrected() / stepTicks);
     }
 
 
@@ -286,6 +287,23 @@ public class spinner extends LinearOpMode {
         return h;
     }
 
+    private void CalibrareSpinner() {
+
+        int ticksActual = getSpinnerPositionCorrected();
+
+        double pasTicks = TICKS_PER_REV / 6.0; // 60°
+
+        int celMaiApropiat =
+                (int) Math.round(ticksActual / pasTicks) * (int) Math.round(pasTicks);
+
+        int delta = celMaiApropiat - ticksActual;
+
+        // corectie LOGICA permanenta
+        encoderOffset += delta;
+
+        // mentine consistenta PID-ului
+        targetTicks += delta;
+    }
     private int smekerie(ColorSensor colorSensor) {
         int r = colorSensor.red();
         int g = colorSensor.green();
@@ -471,7 +489,7 @@ public class spinner extends LinearOpMode {
     }
 
     private double Limitare(double power) {
-        double angleDeg = tureta.getCurrentPosition() * DEG_PER_TICK;
+        double angleDeg = getSpinnerPositionCorrected() * DEG_PER_TICK;
 
         // Limite hard
         double LEFT_LIMIT = -150;
@@ -574,6 +592,9 @@ public class spinner extends LinearOpMode {
         telemetry.addLine("SORT FAILED: No matching orientation");
     }
 
+    private int getSpinnerPositionCorrected() {
+        return spinner.getCurrentPosition() + encoderOffset;
+    }
 
     private void updateTelemetry() {
         telemetry.addData("Slot 1", slots2[0]);
@@ -583,7 +604,7 @@ public class spinner extends LinearOpMode {
         telemetry.addData("unghi tureta",tureta.getCurrentPosition() * DEG_PER_TICK);
         telemetry.addData("putere tureta",tureta.getPower());
         telemetry.addData("tx",lastTx);
-        telemetry.addData("spinner unghi",spinner.getCurrentPosition()*DEG_PER_TICK);
+        telemetry.addData("spinner unghi",getSpinnerPositionCorrected()*DEG_PER_TICK);
       //  telemetry.addData("DistantaTarget", DistantaPerete);
       //  telemetry.addData("unghiLansat",UnghiLansat);
     //    telemetry.addData("atingeriSenSor",atingeriSenzor);
@@ -703,7 +724,7 @@ public class spinner extends LinearOpMode {
 
 
 
-            double currentPos = spinner.getCurrentPosition();
+            double currentPos = getSpinnerPositionCorrected();
             double error = targetTicks - currentPos;
             integralSum += error;
             double derivative = error - lastError;
@@ -774,8 +795,16 @@ public class spinner extends LinearOpMode {
                 spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
                 I=0;
             }*/
-            if (gamepad1.touchpadWasPressed()) reset = true;
-
+            if (limitswitch.isPressed()) {
+                if (!reset) {
+                    CalibrareSpinner();
+                    reset = true;
+                }
+            } else {
+                reset = false;
+            }
+                //   if (gamepad1.touchpadWasPressed()) reset = true;
+/*
             if (gamepad1.touchpadWasPressed()) reset = true;
 
             if (reset) {
@@ -794,7 +823,7 @@ public class spinner extends LinearOpMode {
             }
 
 
-
+*/
 
 
                 updateTelemetry();
