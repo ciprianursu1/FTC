@@ -1,8 +1,11 @@
 package org.firstinspires.ftc.teamcode.TeleOp;
 
+import android.graphics.Color;
+
 import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.hardware.rev.RevColorSensorV3;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -11,6 +14,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.IMU;
+import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.TouchSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
@@ -39,9 +43,9 @@ public class TeleOpMain extends LinearOpMode {
     int Color2 = 0;
     int Color3 = 0;
 
-    ColorSensor colorsensorSLot1;
-    ColorSensor colorsensorSLot2;
-    ColorSensor colorsensorSLot3;
+    ColorSensor ColorSensorSlot1;
+    RevColorSensorV3 ColorSensorSlot2;
+    RevColorSensorV3 ColorSensorSlot3;
     DcMotorEx spinner;
     DcMotor intake;
     DcMotorEx tureta;
@@ -53,7 +57,13 @@ public class TeleOpMain extends LinearOpMode {
     DcMotor flywheel;
 
     // Spinner PID
-    static final double TICKS_PER_REV = 384.5;
+    static final double TICKS_PER_REV = 384.5; // 435 RPM
+    static final double TICKS_PER_60_DEG = TICKS_PER_REV/6.0;
+    static final int BLACK = 0;
+    static final int GREEN = 1;
+    static final int PURPLE = 2;
+    static final int GARBAGE = -1;
+    final double SCALE_FACTOR = 255;
     double P = 0.0101;
     double I = 0.0001;//spinner
     double D = 0.0015;
@@ -61,23 +71,11 @@ public class TeleOpMain extends LinearOpMode {
 
     double lastError = 0;
     double targetTicks = 0;
-
-    boolean step1Done = false;
-    boolean step2Done = false;
-    boolean step3Done = false;
-    boolean step4Done = false;
-    boolean step5Done = false;
-    boolean step6Done = false;
-    boolean step7Done = false;
-    boolean step8Done = false;
-    boolean step9Done = false;
-    boolean step10Done = false;
-    boolean step11Done = false;
-
+    int step = 0;
     Limelight3A limelight;
     IMU imu;
 
-    double DEG_PER_TICK = 360.0 / 383.6;
+    double DEG_PER_TICK = 360.0 / TICKS_PER_REV;
     boolean flywheelOn = false;
     TouchSensor limitswitch;
     boolean butonApasat = false;
@@ -85,6 +83,9 @@ public class TeleOpMain extends LinearOpMode {
     boolean outtakeMode = false;
     private ElapsedTime spinnerTimeout = new ElapsedTime();
     private ElapsedTime outtakeTimeout = new ElapsedTime();
+    private ElapsedTime loopTimer = new ElapsedTime();
+    int timeBeforeLoop;
+    int dt;
     double ejectorDown = 0.285;
     double ejectorUp = 0.005;
     PinpointLocalizer pinpoint;
@@ -140,9 +141,9 @@ public class TeleOpMain extends LinearOpMode {
     }
 
     private void InitAux() {
-        colorsensorSLot1 = hardwareMap.colorSensor.get("Color1");
-        colorsensorSLot2 = hardwareMap.colorSensor.get("Color2");
-        colorsensorSLot3 = hardwareMap.colorSensor.get("Color3");
+            ColorSensorSlot1 = hardwareMap.colorSensor.get("Color1");
+            ColorSensorSlot2 = hardwareMap.get(RevColorSensorV3.class,"Color 2");
+            ColorSensorSlot3 = hardwareMap.get(RevColorSensorV3.class,"Color 3");
             pinpoint=new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
             Pose startPos=new Pose(0, 0, 0);
             pinpoint.setStartPose(startPos);
@@ -196,8 +197,7 @@ public class TeleOpMain extends LinearOpMode {
 
     private void CalibrareSpinner() {
         int ticksActual = getSpinnerPositionCorrected();
-        double pasTicks = TICKS_PER_REV / 6.0;
-        int celMaiApropiat = (int) Math.round(ticksActual / pasTicks) * (int) Math.round(pasTicks);
+        int celMaiApropiat = (int)((int)(ticksActual / TICKS_PER_60_DEG) * TICKS_PER_60_DEG);
         int delta = celMaiApropiat - ticksActual;
         encoderOffset += delta;
         targetTicks += delta;
@@ -219,7 +219,34 @@ public class TeleOpMain extends LinearOpMode {
         else detected = 0;
         return detected;
     }
+    //nu cred ca sunt accurate valorile mele din functiii, dar nici nu am idee ce e ciudatenia de deasupra
+    private int ColorDetectionV3(RevColorSensorV3 cs) {
+        NormalizedRGBA rgba = cs.getNormalizedColors();
+        float[] hsv = new float[3];
+        Color.colorToHSV(rgba.toColor(),hsv);
+        float h = hsv[0];
+        float s = hsv[1];
+        float v = hsv[2];
+        if (v < 0.15 && s < 0.2) return BLACK;
+        if (h > 100 && h < 150) return GREEN;
+        if (h > 265 && h < 295) return PURPLE;
+        return GARBAGE;
+    }
+    private int ColorDetectionV2(ColorSensor cs) {
+        float[] hsv = new float[3];
+        Color.RGBToHSV((int) (cs.red() * SCALE_FACTOR),
+                (int) (cs.green() * SCALE_FACTOR),
+                (int) (cs.blue() * SCALE_FACTOR),
+                hsv);
+        float h = hsv[0];
+        float s = hsv[1];
+        float v = hsv[2];
+        if (v < 0.15 && s < 0.2) return BLACK;
+        if (h > 100 && h < 150) return GREEN;
+        if (h > 265 && h < 295) return PURPLE;
+        return GARBAGE;
 
+    }
     private int CuloareFinala(ColorSensor sensor, int[] last5, int index) {
         last5[index] = smekerie(sensor);
 
@@ -233,14 +260,14 @@ public class TeleOpMain extends LinearOpMode {
         if (count2 >= 3) return 2;
         return 0;
     }
-
+// inca nu am inteles rostul la asta dar ok
 
     private void updateCulori() {
-        Color1 = CuloareFinala(colorsensorSLot1, last5Sensor1, indexSensor1);
+        Color1 = CuloareFinala(ColorSensorSlot1, last5Sensor1, indexSensor1);
         indexSensor1 = (indexSensor1 + 1) % 5;
-        Color2 = CuloareFinala(colorsensorSLot2, last5Sensor2, indexSensor2);
+        Color2 = CuloareFinala(ColorSensorSlot2, last5Sensor2, indexSensor2);
         indexSensor2 = (indexSensor2 + 1) % 5;
-        Color3 = CuloareFinala(colorsensorSLot3, last5Sensor3, indexSensor3);
+        Color3 = CuloareFinala(ColorSensorSlot3, last5Sensor3, indexSensor3);
         indexSensor3 = (indexSensor3 + 1) % 5;
     }
 
@@ -260,20 +287,19 @@ public class TeleOpMain extends LinearOpMode {
         }
     }
 
-    private void pidSPinnerLogic() {
+    private void pidSpinnerLogic() { // PID-ul avea nevoie de delta t pt derivata
         double currentPos = getSpinnerPositionCorrected();
         double error = targetTicks - currentPos;
         integralSum += error;
-        double derivative = error - lastError;
+        double derivative = (error - lastError) / dt;
         lastError = error;
         double pidOutput = error * P + integralSum * I + derivative * D;
         pidOutput = Math.max(-0.5, Math.min(0.5, pidOutput));
-        if (!butonApasat) spinner.setPower(pidOutput);
+        spinner.setPower(pidOutput);
     }
 
     private boolean spinnerFull() {
-        if (Color1 != 0 && Color2 != 0 && Color3 != 0) return true;
-        else return false;
+        return (Color1 == PURPLE || Color1 == GREEN) && (Color2 == PURPLE || Color2 == GREEN) && (Color3 == PURPLE || Color3 == GREEN);
     }
 
     private void colorDrivenSpinnerLogic() {
@@ -316,6 +342,7 @@ public class TeleOpMain extends LinearOpMode {
             telemetry.addData("Slot 2", Color2);
             telemetry.addData("Slot 3", Color3);
         }
+        telemetry.addData("eroare encoder", encoderOffset); // curiozitate
         telemetry.addData("timp_intake", spinnerTimeout.time());
         telemetry.addData("timp_outtake", outtakeTimeout.time());
         telemetry.addData("spinner unghi", getSpinnerPositionCorrected() * DEG_PER_TICK);
@@ -335,63 +362,41 @@ public class TeleOpMain extends LinearOpMode {
             butonApasat = false;
         }
     }
-
+// Ce inseamna unghiurile astea random?
+    //TODO: redu timpurile dupa estimatii
     private void runOuttake() {
+        if (step != -1) {
+            slots[0] = Color1;
+            slots[1] = Color2;
+            slots[2] = Color3;
 
-        slots[0] = Color1;
-        slots[1] = Color2;
-        slots[2] = Color3;
+            double t = outtakeTimeout.milliseconds();
 
-        double t = outtakeTimeout.milliseconds();
-
-        if (t >= 10 && !step1Done) {
-            targetTicks += 65 * DEG_PER_TICK;
-            step1Done = true;
-        }
-
-        if (t >= 1000 && !step2Done) {
-            ejector.setPosition(ejectorUp);
-            step2Done = true;
-        }
-
-        if (t >= 2000 && !step3Done) {
-            ejector.setPosition(ejectorDown);
-            step3Done = true;
-        }
-
-        if (t >= 3500 && !step4Done) {
-            targetTicks += 145 * DEG_PER_TICK;
-            step4Done = true;
-        }
-
-        if (t >= 5000 && !step5Done) {
-            ejector.setPosition(ejectorUp);
-            step5Done = true;
-        }
-
-        if (t >= 6000 && !step6Done) {
-            ejector.setPosition(ejectorDown);
-            step6Done = true;
-        }
-
-        if (t >= 7000 && !step7Done) {
-            targetTicks += 143 * DEG_PER_TICK;
-            step7Done = true;
-        }
-
-        if (t >= 8500 && !step8Done) {
-            ejector.setPosition(ejectorUp);
-            step8Done = true;
-        }
-
-        if (t >= 9500 && !step9Done) {
-            ejector.setPosition(ejectorDown);
-            step9Done = true;
-        }
-        if (t >= 10000 && !step10Done) {
-            targetTicks += 60 * DEG_PER_TICK;
-            step10Done = true;
-            outtakeMode = false; // finished
+            if (t >= 10 && step == 0) {
+                targetTicks += 65 * DEG_PER_TICK;
+            } else if (t >= 1000 && step == 1) {
+                ejector.setPosition(ejectorUp);
+            } else if (t >= 2000 && step == 2) {
+                ejector.setPosition(ejectorDown);
+            } else if (t >= 3500 && step == 3) {
+                targetTicks += 145 * DEG_PER_TICK;
+            } else if (t >= 5000 && step == 4) {
+                ejector.setPosition(ejectorUp);
+            } else if (t >= 6000 && step == 5) {
+                ejector.setPosition(ejectorDown);
+            } else if (t >= 7000 && step == 6) {
+                targetTicks += 143 * DEG_PER_TICK;
+            } else if (t >= 8500 && step == 7) { // 6 7
+                ejector.setPosition(ejectorUp);
+            } else if (t >= 9500 && step == 8) {
+                ejector.setPosition(ejectorDown);
+            } else if (t >= 10000 && step == 9) {
+                targetTicks += 60 * DEG_PER_TICK;
+                outtakeMode = false; // finished
+            }
+            step++;
+            step = -1;
+            outtakeMode = false;
         }
       /*  if (t>=3200 && !step11Done)
         {
@@ -429,13 +434,14 @@ public class TeleOpMain extends LinearOpMode {
         InitServo();
 
         waitForStart();
-
+        loopTimer.reset();
+        timeBeforeLoop = 0;
         while (opModeIsActive()) {
            // CalibrareEncoder();
             servoLogic();
             updateTelemetry();
             SetWheelsPower();
-            pidSPinnerLogic();
+            pidSpinnerLogic();
             flywheelLogic();
             if (gamepad1.circleWasPressed()) {
                 intake.setPower(-1);
@@ -457,22 +463,19 @@ public class TeleOpMain extends LinearOpMode {
 
                 integralSum = 0;
                 lastError = 0;
-                step1Done = false;
-                step2Done = false;
-                step3Done = false;
-                step4Done = false;
-                step5Done = false;
-                step6Done = false;
-                step7Done = false;
-                step8Done = false;
-                step9Done = false;
-                step10Done = false;
+                step = 0;
             }
 
             if (outtakeMode) {
-               runOuttake();
+                runOuttake();
+                step = 0;
+            } else {
+                outtakeTimeout.reset();
             }
             Localizare();
+            dt = (int)loopTimer.milliseconds() - timeBeforeLoop;
+            timeBeforeLoop = (int)loopTimer.milliseconds();
+            loopTimer.reset();
             idle();
         }
             //ETC
