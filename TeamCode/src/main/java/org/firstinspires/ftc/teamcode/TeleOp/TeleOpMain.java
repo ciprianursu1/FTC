@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.TeleOp;
 
+import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
+import com.pedropathing.geometry.Pose;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
@@ -8,10 +10,13 @@ import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.TouchSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
+
+import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
 @TeleOp(name = "aTeleOpMain")
 public class TeleOpMain extends LinearOpMode {
@@ -71,7 +76,11 @@ public class TeleOpMain extends LinearOpMode {
     boolean outtakeMode=false;
     private ElapsedTime spinnerTimeout = new ElapsedTime();
 
+    //PINPOINT
 
+    double coordX, coordY, header;
+    PinpointLocalizer pinpoint;
+    Pose startPos;
 
     private void InitWheels() {
         front_left = hardwareMap.dcMotor.get("lf");
@@ -131,6 +140,15 @@ public class TeleOpMain extends LinearOpMode {
     }
 
 
+    private void InitPinpoit()
+    {
+        pinpoint=new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
+
+        startPos=new Pose(0,0,0);
+        pinpoint.setStartPose(startPos);
+    }
+
+
     private void SetWheelsPower() {
         double left_x = gamepad2.left_stick_x;
         double left_y = -gamepad2.left_stick_y; // forward is negative
@@ -175,6 +193,15 @@ public class TeleOpMain extends LinearOpMode {
 
         return h;
     }
+
+
+    private void Localizare()
+    {
+        pinpoint.update();
+        Pose position =pinpoint.getPose();
+        double coordX=position.getX(), coordY=position.getY(), header= position.getHeading();
+    }
+
 
     private void CalibrareSpinner() {
         int ticksActual = getSpinnerPositionCorrected();
@@ -304,6 +331,9 @@ public class TeleOpMain extends LinearOpMode {
             telemetry.addData("Slot 3", Color3);
         }
         telemetry.addData("spinner unghi",getSpinnerPositionCorrected()*DEG_PER_TICK);
+        telemetry.addData("axa OX", coordX);
+        telemetry.addData("axa OY", coordY);
+        telemetry.addData("header", header);
         telemetry.update();
     }
 
@@ -327,10 +357,12 @@ public class TeleOpMain extends LinearOpMode {
         InitDc();
         InitLL();
         InitServo();
+        InitPinpoit();;
 
         waitForStart();
 
         while (opModeIsActive()) {
+            Localizare();
             CalibrareEncoder();
             servoLogic();
             updateTelemetry();
