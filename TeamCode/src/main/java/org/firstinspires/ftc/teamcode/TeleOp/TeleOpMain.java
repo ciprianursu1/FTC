@@ -394,7 +394,7 @@ public class TeleOpMain extends LinearOpMode {
             outtakeMode = false; // finished
         }
       /*  if (t>=3200 && !step11Done)
-        {
+        {hhhhh
             spinner.setPower(0.15);  // move slowly toward limit switch
             if (limitswitch.isPressed()) {
                 spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
