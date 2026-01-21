@@ -32,7 +32,6 @@ public class TeleOpMain extends LinearOpMode {
     int indexSensor2 = 0;
     int indexSensor3 = 0;
 
-
     int encoderOffset = 0;
     // Spinner slots
     int[] slots = new int[3];
@@ -44,9 +43,10 @@ public class TeleOpMain extends LinearOpMode {
     int Color3 = 0;
 
     ColorSensor ColorSensorSlot1;
-    RevColorSensorV3 ColorSensorSlot2;
-    RevColorSensorV3 ColorSensorSlot3;
-    DcMotorEx spinner;
+    ColorSensor ColorSensorSlot2;
+    ColorSensor ColorSensorSlot3;
+    Servo spinnerClose;
+    Servo spinnerFar;
     DcMotor intake;
     DcMotorEx tureta;
     Servo ejector;
@@ -71,6 +71,8 @@ public class TeleOpMain extends LinearOpMode {
 
     double lastError = 0;
     double targetTicks = 0;
+    double spinnerPos = 0;
+
     int step = 0;
     Limelight3A limelight;
     IMU imu;
@@ -86,6 +88,8 @@ public class TeleOpMain extends LinearOpMode {
     private ElapsedTime loopTimer = new ElapsedTime();
     int timeBeforeLoop;
     int dt;
+    final double maxSpinner = 360.0/510.0;
+    final double SPINNER_60_DEG = maxSpinner/6.0;
     double ejectorDown = 0.285;
     double ejectorUp = 0.005;
     PinpointLocalizer pinpoint;
@@ -106,16 +110,10 @@ public class TeleOpMain extends LinearOpMode {
     }
 
     private void InitDc() {
-
-        spinner = hardwareMap.get(DcMotorEx.class, "spinner");
         intake = hardwareMap.get(DcMotor.class, "intake");
         tureta = hardwareMap.get(DcMotorEx.class, "tureta");
         flywheel = hardwareMap.get(DcMotor.class, "flywheel");
         limitswitch = hardwareMap.get(TouchSensor.class, "limitswitch");
-
-        spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        spinner.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
         tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
@@ -125,6 +123,10 @@ public class TeleOpMain extends LinearOpMode {
     private void InitServo() {
         ejector = hardwareMap.get(Servo.class, "ejector");//0.285 down 0.005 up
         ejector.setPosition(0.285);
+        spinnerClose = hardwareMap.get(Servo.class, "SpinnerClose");
+        spinnerFar = hardwareMap.get(Servo.class, "SpinnerFar");
+        spinnerFar.setPosition(0);
+        spinnerClose.setPosition(0);
     }
 
     private void InitLL() {
@@ -142,8 +144,8 @@ public class TeleOpMain extends LinearOpMode {
 
     private void InitAux() {
             ColorSensorSlot1 = hardwareMap.colorSensor.get("Color1");
-            ColorSensorSlot2 = hardwareMap.get(RevColorSensorV3.class,"Color 2");
-            ColorSensorSlot3 = hardwareMap.get(RevColorSensorV3.class,"Color 3");
+            ColorSensorSlot2 = hardwareMap.colorSensor.get("Color2");
+            ColorSensorSlot3 = hardwareMap.colorSensor.get("Color3");
             pinpoint=new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
             Pose startPos=new Pose(0, 0, 0);
             pinpoint.setStartPose(startPos);
@@ -195,13 +197,13 @@ public class TeleOpMain extends LinearOpMode {
         return h;
     }
 
-    private void CalibrareSpinner() {
-        int ticksActual = getSpinnerPositionCorrected();
-        int celMaiApropiat = (int)((int)(ticksActual / TICKS_PER_60_DEG) * TICKS_PER_60_DEG);
-        int delta = celMaiApropiat - ticksActual;
-        encoderOffset += delta;
-        targetTicks += delta;
-    }
+//    private void CalibrareSpinner() {
+//        int ticksActual = getSpinnerPositionCorrected();
+//        int celMaiApropiat = (int)((int)(ticksActual / TICKS_PER_60_DEG) * TICKS_PER_60_DEG);
+//        int delta = celMaiApropiat - ticksActual;
+//        encoderOffset += delta;
+//        targetTicks += delta;
+//    }
 
     private int smekerie(ColorSensor colorSensor) {
         int r = colorSensor.red();
@@ -287,16 +289,16 @@ public class TeleOpMain extends LinearOpMode {
         }
     }
 
-    private void pidSpinnerLogic() { // PID-ul avea nevoie de delta t pt derivata
-        double currentPos = getSpinnerPositionCorrected();
-        double error = targetTicks - currentPos;
-        integralSum += error;
-        double derivative = (error - lastError) / dt;
-        lastError = error;
-        double pidOutput = error * P + integralSum * I + derivative * D;
-        pidOutput = Math.max(-0.5, Math.min(0.5, pidOutput));
-        spinner.setPower(pidOutput);
-    }
+//    private void pidSpinnerLogic() { // PID-ul avea nevoie de delta t pt derivata
+//        double currentPos = getSpinnerPositionCorrected();
+//        double error = targetTicks - currentPos;
+//        integralSum += error;
+//        double derivative = (error - lastError) / dt;
+//        lastError = error;
+//        double pidOutput = error * P + integralSum * I + derivative * D;
+//        pidOutput = Math.max(-0.5, Math.min(0.5, pidOutput));
+//        spinner.setPower(pidOutput);
+//    }
 
     private boolean spinnerFull() {
         return (Color1 == PURPLE || Color1 == GREEN) && (Color2 == PURPLE || Color2 == GREEN) && (Color3 == PURPLE || Color3 == GREEN);
@@ -306,9 +308,16 @@ public class TeleOpMain extends LinearOpMode {
         if (Color1 != 0 && !spinnerFull()) {
             if (spinnerTimeout.milliseconds() >= 1000) {
                 targetTicks += 135 * DEG_PER_TICK;
+                spinnerPos += maxSpinner/3.0;
                 spinnerTimeout.reset();
             }
         }
+    }
+    private void updateSpinner(){
+        spinnerPos -= (int)(spinnerPos/maxSpinner)*maxSpinner;
+        spinnerClose.setPosition(spinnerPos);
+        spinnerFar.setPosition(spinnerPos);
+
     }
 
     /*
@@ -326,9 +335,9 @@ public class TeleOpMain extends LinearOpMode {
             slots2[2] = temp;
         }
     */
-    private int getSpinnerPositionCorrected() {
-        return spinner.getCurrentPosition() + encoderOffset;
-    }
+//    private int getSpinnerPositionCorrected() {
+//        return spinner.getCurrentPosition() + encoderOffset;
+//    }
 
 
     private void updateTelemetry() {
@@ -345,23 +354,24 @@ public class TeleOpMain extends LinearOpMode {
         telemetry.addData("eroare encoder", encoderOffset); // curiozitate
         telemetry.addData("timp_intake", spinnerTimeout.time());
         telemetry.addData("timp_outtake", outtakeTimeout.time());
-        telemetry.addData("spinner unghi", getSpinnerPositionCorrected() * DEG_PER_TICK);
+//        telemetry.addData("spinner unghi", getSpinnerPositionCorrected() * DEG_PER_TICK);
+        telemetry.addData("unghi spinner", spinnerClose.getPosition());
         telemetry.addData("x", CoordX);
         telemetry.addData("y", CoordY);
         telemetry.addData("heading", header);
         telemetry.update();
     }
 
-    private void CalibrareEncoder() {
-        if (limitswitch.isPressed()) {
-            if (!butonApasat) {
-                CalibrareSpinner();
-                butonApasat = true;
-            }
-        } else {
-            butonApasat = false;
-        }
-    }
+//    private void CalibrareEncoder() {
+//        if (limitswitch.isPressed()) {
+//            if (!butonApasat) {
+//                CalibrareSpinner();
+//                butonApasat = true;
+//            }
+//        } else {
+//            butonApasat = false;
+//        }
+//    }
 // Ce inseamna unghiurile astea random?
     //TODO: redu timpurile dupa estimatii
     private void runOuttake() {
@@ -374,6 +384,7 @@ public class TeleOpMain extends LinearOpMode {
 
             if (t >= 10 && step == 0) {
                 targetTicks += 65 * DEG_PER_TICK;
+                spinnerPos += SPINNER_60_DEG;
             } else if (t >= 1000 && step == 1) {
                 ejector.setPosition(ejectorUp);
             } else if (t >= 2000 && step == 2) {
@@ -392,11 +403,9 @@ public class TeleOpMain extends LinearOpMode {
                 ejector.setPosition(ejectorDown);
             } else if (t >= 10000 && step == 9) {
                 targetTicks += 60 * DEG_PER_TICK;
+                spinnerPos += SPINNER_60_DEG;
                 outtakeMode = false; // finished
             }
-            step++;
-            step = -1;
-            outtakeMode = false;
         }
       /*  if (t>=3200 && !step11Done)
         {
@@ -441,7 +450,8 @@ public class TeleOpMain extends LinearOpMode {
             servoLogic();
             updateTelemetry();
             SetWheelsPower();
-            pidSpinnerLogic();
+            updateSpinner();
+//            pidSpinnerLogic();
             flywheelLogic();
             if (gamepad1.circleWasPressed()) {
                 intake.setPower(-1);
@@ -471,6 +481,9 @@ public class TeleOpMain extends LinearOpMode {
                 step = 0;
             } else {
                 outtakeTimeout.reset();
+            }
+            if(gamepad1.dpadUpWasPressed()){
+                spinnerPos += SPINNER_60_DEG;
             }
             Localizare();
             dt = (int)loopTimer.milliseconds() - timeBeforeLoop;
