@@ -1,11 +1,8 @@
 package org.firstinspires.ftc.teamcode.TeleOp;
 
-import android.graphics.Color;
-
 import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
-import com.qualcomm.hardware.rev.RevColorSensorV3;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -14,9 +11,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.IMU;
-import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 import com.qualcomm.robotcore.hardware.Servo;
-import com.qualcomm.robotcore.hardware.TouchSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
@@ -31,9 +26,10 @@ public class TeleOpMain extends LinearOpMode {
     int indexSensor1 = 0;
     int indexSensor2 = 0;
     int indexSensor3 = 0;
+    boolean spinnerBusy = false;
+    int spinnerbusyTime = 0;
 
-    int encoderOffset = 0;
-    // Spinner slots
+
     int[] slots = new int[3];
     int[] totem = {2, 1, 2};
 
@@ -42,11 +38,9 @@ public class TeleOpMain extends LinearOpMode {
     int Color2 = 0;
     int Color3 = 0;
 
-    ColorSensor ColorSensorSlot1;
-    ColorSensor ColorSensorSlot2;
-    ColorSensor ColorSensorSlot3;
-    Servo spinnerClose;
-    Servo spinnerFar;
+    ColorSensor colorsensorSLot1;
+    ColorSensor colorsensorSLot2;
+    ColorSensor colorsensorSLot3;
     DcMotor intake;
     DcMotorEx tureta;
     Servo ejector;
@@ -54,47 +48,49 @@ public class TeleOpMain extends LinearOpMode {
     DcMotor front_right;
     DcMotor back_left;
     DcMotor back_right;
-    DcMotor flywheel;
+    DcMotorEx flywheel;
+    Servo spinnerCLose;
+    Servo spinnerFar;
 
-    // Spinner PID
-    static final double TICKS_PER_REV = 384.5; // 435 RPM
-    static final double TICKS_PER_60_DEG = TICKS_PER_REV/6.0;
-    static final int BLACK = 0;
-    static final int GREEN = 1;
-    static final int PURPLE = 2;
-    static final int GARBAGE = -1;
-    final double SCALE_FACTOR = 255;
-    double P = 0.0101;
-    double I = 0.0001;//spinner
-    double D = 0.0015;
-    double integralSum = 0;
 
-    double lastError = 0;
-    double targetTicks = 0;
-    double spinnerPos = 0;
+    boolean step1Done = false;
+    boolean step2Done = false;
+    boolean step3Done = false;
+    boolean step4Done = false;
+    boolean step5Done = false;
+    boolean step6Done = false;
+    boolean step7Done = false;
+    boolean step8Done = false;
+    boolean step9Done = false;
+    boolean step10Done = false;
+    boolean step11Done = false;
 
-    int step = 0;
     Limelight3A limelight;
     IMU imu;
 
-    double DEG_PER_TICK = 360.0 / TICKS_PER_REV;
+    double DEG_PER_TICK = 360.0 / 383.6;
     boolean flywheelOn = false;
-    TouchSensor limitswitch;
-    boolean butonApasat = false;
     boolean intakeMode = false;
     boolean outtakeMode = false;
     private ElapsedTime spinnerTimeout = new ElapsedTime();
     private ElapsedTime outtakeTimeout = new ElapsedTime();
-    private ElapsedTime loopTimer = new ElapsedTime();
-    int timeBeforeLoop;
-    int dt;
-    final double maxSpinner = 360.0/510.0;
-    final double SPINNER_60_DEG = maxSpinner/6.0;
     double ejectorDown = 0.285;
     double ejectorUp = 0.005;
     PinpointLocalizer pinpoint;
     Pose pose;
     double CoordX, CoordY, header;
+    double Posspinner = 0;
+    double PosspinnerMin = 0;
+    double PosspinnerMax = 0.95;
+    int ballsLoaded = 0;
+
+    static final double FLYWHEEL_TICKS_PER_REV = 384.5;
+    static final double TARGET_RPM = 180;
+
+    double flywheelPowerHigh = 0.6;
+    double flywheelPowerLow = 0.5;
+
+    double flywheelTolerance = 20; // RPM
 
 
     private void InitWheels() {
@@ -110,23 +106,26 @@ public class TeleOpMain extends LinearOpMode {
     }
 
     private void InitDc() {
+
         intake = hardwareMap.get(DcMotor.class, "intake");
         tureta = hardwareMap.get(DcMotorEx.class, "tureta");
-        flywheel = hardwareMap.get(DcMotor.class, "flywheel");
-        limitswitch = hardwareMap.get(TouchSensor.class, "limitswitch");
+        flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
 
         tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         tureta.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
+
+        flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
     }
 
     private void InitServo() {
         ejector = hardwareMap.get(Servo.class, "ejector");//0.285 down 0.005 up
-        ejector.setPosition(0.285);
-        spinnerClose = hardwareMap.get(Servo.class, "SpinnerClose");
         spinnerFar = hardwareMap.get(Servo.class, "SpinnerFar");
+        spinnerCLose = hardwareMap.get(Servo.class, "SpinnerClose");
+        ejector.setPosition(0.285);
         spinnerFar.setPosition(0);
-        spinnerClose.setPosition(0);
     }
 
     private void InitLL() {
@@ -143,12 +142,12 @@ public class TeleOpMain extends LinearOpMode {
     }
 
     private void InitAux() {
-            ColorSensorSlot1 = hardwareMap.colorSensor.get("Color1");
-            ColorSensorSlot2 = hardwareMap.colorSensor.get("Color2");
-            ColorSensorSlot3 = hardwareMap.colorSensor.get("Color3");
-            pinpoint=new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
-            Pose startPos=new Pose(0, 0, 0);
-            pinpoint.setStartPose(startPos);
+        colorsensorSLot1 = hardwareMap.colorSensor.get("Color1");
+        colorsensorSLot2 = hardwareMap.colorSensor.get("Color2");
+        colorsensorSLot3 = hardwareMap.colorSensor.get("Color3");
+        pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
+        Pose startPos = new Pose(0, 0, 0);
+        pinpoint.setStartPose(startPos);
     }
 
 
@@ -197,13 +196,6 @@ public class TeleOpMain extends LinearOpMode {
         return h;
     }
 
-//    private void CalibrareSpinner() {
-//        int ticksActual = getSpinnerPositionCorrected();
-//        int celMaiApropiat = (int)((int)(ticksActual / TICKS_PER_60_DEG) * TICKS_PER_60_DEG);
-//        int delta = celMaiApropiat - ticksActual;
-//        encoderOffset += delta;
-//        targetTicks += delta;
-//    }
 
     private int smekerie(ColorSensor colorSensor) {
         int r = colorSensor.red();
@@ -221,34 +213,7 @@ public class TeleOpMain extends LinearOpMode {
         else detected = 0;
         return detected;
     }
-    //nu cred ca sunt accurate valorile mele din functiii, dar nici nu am idee ce e ciudatenia de deasupra
-    private int ColorDetectionV3(RevColorSensorV3 cs) {
-        NormalizedRGBA rgba = cs.getNormalizedColors();
-        float[] hsv = new float[3];
-        Color.colorToHSV(rgba.toColor(),hsv);
-        float h = hsv[0];
-        float s = hsv[1];
-        float v = hsv[2];
-        if (v < 0.15 && s < 0.2) return BLACK;
-        if (h > 100 && h < 150) return GREEN;
-        if (h > 265 && h < 295) return PURPLE;
-        return GARBAGE;
-    }
-    private int ColorDetectionV2(ColorSensor cs) {
-        float[] hsv = new float[3];
-        Color.RGBToHSV((int) (cs.red() * SCALE_FACTOR),
-                (int) (cs.green() * SCALE_FACTOR),
-                (int) (cs.blue() * SCALE_FACTOR),
-                hsv);
-        float h = hsv[0];
-        float s = hsv[1];
-        float v = hsv[2];
-        if (v < 0.15 && s < 0.2) return BLACK;
-        if (h > 100 && h < 150) return GREEN;
-        if (h > 265 && h < 295) return PURPLE;
-        return GARBAGE;
 
-    }
     private int CuloareFinala(ColorSensor sensor, int[] last5, int index) {
         last5[index] = smekerie(sensor);
 
@@ -262,24 +227,34 @@ public class TeleOpMain extends LinearOpMode {
         if (count2 >= 3) return 2;
         return 0;
     }
-// inca nu am inteles rostul la asta dar ok
+
 
     private void updateCulori() {
-        Color1 = CuloareFinala(ColorSensorSlot1, last5Sensor1, indexSensor1);
+        Color1 = CuloareFinala(colorsensorSLot1, last5Sensor1, indexSensor1);
         indexSensor1 = (indexSensor1 + 1) % 5;
-        Color2 = CuloareFinala(ColorSensorSlot2, last5Sensor2, indexSensor2);
+        Color2 = CuloareFinala(colorsensorSLot2, last5Sensor2, indexSensor2);
         indexSensor2 = (indexSensor2 + 1) % 5;
-        Color3 = CuloareFinala(ColorSensorSlot3, last5Sensor3, indexSensor3);
+        Color3 = CuloareFinala(colorsensorSLot3, last5Sensor3, indexSensor3);
         indexSensor3 = (indexSensor3 + 1) % 5;
     }
 
     private void flywheelLogic() {
         if (gamepad1.shareWasPressed()) {
             flywheelOn = !flywheelOn;
-            if (flywheelOn) flywheel.setPower(0.55);
-            else flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        }
+
+        if (flywheelOn) {
+            double rpm = getFlywheelRPM();
+            double power = calculateBang(TARGET_RPM, rpm);
+            flywheel.setPower(power);
+
+            telemetry.addData("Flywheel RPM", rpm);
+            telemetry.addData("Flywheel Power", power);
+        } else {
+            flywheel.setPower(0);
         }
     }
+
 
     private void servoLogic() {
         if (gamepad1.optionsWasReleased()) {
@@ -287,57 +262,90 @@ public class TeleOpMain extends LinearOpMode {
         } else if (gamepad1.optionsWasPressed()) {
             ejector.setPosition(0.005);
         }
+        if (gamepad1.touchpadWasPressed())
+            Posspinner = 0;
+        //0.19=60 de grade
+        if (gamepad1.dpadRightWasPressed()) Posspinner = Posspinner + 0.19;
+        if (gamepad1.dpadLeftWasPressed()) Posspinner = Posspinner - 0.19;
     }
-
-//    private void pidSpinnerLogic() { // PID-ul avea nevoie de delta t pt derivata
-//        double currentPos = getSpinnerPositionCorrected();
-//        double error = targetTicks - currentPos;
-//        integralSum += error;
-//        double derivative = (error - lastError) / dt;
-//        lastError = error;
-//        double pidOutput = error * P + integralSum * I + derivative * D;
-//        pidOutput = Math.max(-0.5, Math.min(0.5, pidOutput));
-//        spinner.setPower(pidOutput);
-//    }
 
     private boolean spinnerFull() {
-        return (Color1 == PURPLE || Color1 == GREEN) && (Color2 == PURPLE || Color2 == GREEN) && (Color3 == PURPLE || Color3 == GREEN);
+        if (Color1 != 0 && Color2 != 0 && Color3 != 0) return true;
+        else return false;
     }
+
+    private double getFlywheelRPM() {
+        return flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
+    }
+
+    private double calculateBang(double targetRPM, double currentRPM) {
+
+        if (currentRPM < targetRPM - flywheelTolerance) {
+            return flywheelPowerHigh;   // accelerează
+        } else if (currentRPM > targetRPM + flywheelTolerance) {
+            return flywheelPowerLow;    // coast
+        } else {
+            return flywheelPowerLow;    // menține
+        }
+    }
+
 
     private void colorDrivenSpinnerLogic() {
-        if (Color1 != 0 && !spinnerFull()) {
-            if (spinnerTimeout.milliseconds() >= 1000) {
-                targetTicks += 135 * DEG_PER_TICK;
-                spinnerPos += maxSpinner/3.0;
-                spinnerTimeout.reset();
+
+        if (spinnerFull()) return;
+        int detectedBalls = 0;
+        if (Color1 != 0) detectedBalls++;
+        if (Color2 != 0) detectedBalls++;
+        if (Color3 != 0) detectedBalls++;
+        if (spinnerBusy) {
+            if(spinnerbusyTime == 0) {
+                spinnerbusyTime = (int) spinnerTimeout.milliseconds();
+            } else
+            if(spinnerTimeout.milliseconds() - spinnerbusyTime >= 150) {
+                spinnerBusy = false;
+                spinnerbusyTime = 0;
             }
+            return;
+
+        }
+        if (Color1!=0) {
+
+            switch (detectedBalls) {
+                case 1:
+                    Posspinner = 0.19;
+                    break;
+                case 2:
+                    Posspinner = 0.38;
+                    break;
+                case 3:
+                    Posspinner = 0.38+0.19;
+                    break;
+            }
+            if (detectedBalls != 0) spinnerBusy = true;
+
+            spinnerTimeout.reset();
         }
     }
-    private void updateSpinner(){
-        spinnerPos -= (int)(spinnerPos/maxSpinner)*maxSpinner;
-        spinnerClose.setPosition(spinnerPos);
-        spinnerFar.setPosition(spinnerPos);
 
-    }
 
-    /*
-        private void rotateSlotsRight() {
-            int temp = slots2[2];
-            slots2[2] = slots2[1];
-            slots2[1] = slots2[0];
-            slots2[0] = temp;
-        }
 
-        private void rotateSlotsLeft() {
-            int temp = slots2[0];
-            slots2[0] = slots2[1];
-            slots2[1] = slots2[2];
-            slots2[2] = temp;
-        }
-    */
-//    private int getSpinnerPositionCorrected() {
-//        return spinner.getCurrentPosition() + encoderOffset;
-//    }
+
+
+        /*
+            private void rotateSlotsRight() {
+                int temp = slots2[2];
+                slots2[2] = slots2[1];
+                slots2[1] = slots2[0];
+                slots2[0] = temp;
+            }
+
+            private void rotateSlotsLeft() {
+                int temp = slots2[0];
+                slots2[0] = slots2[1];
+                slots2[1] = slots2[2];
+                slots2[2] = temp;
+            }
+        */
 
 
     private void updateTelemetry() {
@@ -351,91 +359,96 @@ public class TeleOpMain extends LinearOpMode {
             telemetry.addData("Slot 2", Color2);
             telemetry.addData("Slot 3", Color3);
         }
-        telemetry.addData("eroare encoder", encoderOffset); // curiozitate
         telemetry.addData("timp_intake", spinnerTimeout.time());
         telemetry.addData("timp_outtake", outtakeTimeout.time());
-//        telemetry.addData("spinner unghi", getSpinnerPositionCorrected() * DEG_PER_TICK);
-        telemetry.addData("unghi spinner", spinnerClose.getPosition());
         telemetry.addData("x", CoordX);
         telemetry.addData("y", CoordY);
         telemetry.addData("heading", header);
+        telemetry.addData("unghiSPinner", spinnerFar.getPosition());
+        telemetry.addData("close", spinnerCLose.getPosition());
         telemetry.update();
     }
 
-//    private void CalibrareEncoder() {
-//        if (limitswitch.isPressed()) {
-//            if (!butonApasat) {
-//                CalibrareSpinner();
-//                butonApasat = true;
-//            }
-//        } else {
-//            butonApasat = false;
-//        }
-//    }
-// Ce inseamna unghiurile astea random?
-    //TODO: redu timpurile dupa estimatii
+
     private void runOuttake() {
-        if (step != -1) {
-            slots[0] = Color1;
-            slots[1] = Color2;
-            slots[2] = Color3;
 
-            double t = outtakeTimeout.milliseconds();
+        slots[0] = Color1;
+        slots[1] = Color2;
+        slots[2] = Color3;
 
-            if (t >= 10 && step == 0) {
-                targetTicks += 65 * DEG_PER_TICK;
-                spinnerPos += SPINNER_60_DEG;
-            } else if (t >= 1000 && step == 1) {
-                ejector.setPosition(ejectorUp);
-            } else if (t >= 2000 && step == 2) {
-                ejector.setPosition(ejectorDown);
-            } else if (t >= 3500 && step == 3) {
-                targetTicks += 145 * DEG_PER_TICK;
-            } else if (t >= 5000 && step == 4) {
-                ejector.setPosition(ejectorUp);
-            } else if (t >= 6000 && step == 5) {
-                ejector.setPosition(ejectorDown);
-            } else if (t >= 7000 && step == 6) {
-                targetTicks += 143 * DEG_PER_TICK;
-            } else if (t >= 8500 && step == 7) { // 6 7
-                ejector.setPosition(ejectorUp);
-            } else if (t >= 9500 && step == 8) {
-                ejector.setPosition(ejectorDown);
-            } else if (t >= 10000 && step == 9) {
-                targetTicks += 60 * DEG_PER_TICK;
-                spinnerPos += SPINNER_60_DEG;
-                outtakeMode = false; // finished
-            }
+        Color1 = 0;
+        Color2 = 0;
+        Color3 = 0;
+
+        double t = outtakeTimeout.milliseconds();
+
+        if (t >= 10 && !step1Done) {
+            Posspinner = 0.095;
+            step1Done = true;
         }
-      /*  if (t>=3200 && !step11Done)
-        {
-            spinner.setPower(0.15);  // move slowly toward limit switch
-            if (limitswitch.isPressed()) {
-                spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-                spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-                spinner.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-                integralSum = 0;      // reset PID integral
-                lastError = 0;        // reset PID derivative
-            }
-            step11Done=true;
 
-        }*/
+        if (t >= 1000 && !step2Done) {
+            ejector.setPosition(ejectorUp);
+            step2Done = true;
+        }
+
+        if (t >= 2000 && !step3Done) {
+            ejector.setPosition(ejectorDown);
+            step3Done = true;
+        }
+
+        if (t >= 4000 && !step4Done) {
+            Posspinner = 0.29;
+            step4Done = true;
+        }
+
+        if (t >= 6000 && !step5Done) {
+            ejector.setPosition(ejectorUp);
+            step5Done = true;
+        }
+
+        if (t >= 8000 && !step6Done) {
+            ejector.setPosition(ejectorDown);
+            step6Done = true;
+        }
+
+        if (t >= 10000 && !step7Done) {
+            Posspinner = 0.49;
+            step7Done = true;
+        }
+
+        if (t >= 12000 && !step8Done) {
+            ejector.setPosition(ejectorUp);
+            step8Done = true;
+        }
+
+        if (t >= 14000 && !step9Done) {
+            ejector.setPosition(ejectorDown);
+            step9Done = true;
+        }
+        if (t >= 16000 && !step10Done) {
+            Posspinner = 0;
+            step10Done = true;
+            outtakeMode = false;
+            intakeMode = false;
+            ballsLoaded = 0;
+        }
     }
 
 
-    private void Localizare()
+    private void Localizare ()
     {
         pinpoint.update();
-        Pose position=pinpoint.getPose();
-        CoordX=position.getX();
-        CoordY=position.getY();
-        header=position.getHeading();
+        Pose position = pinpoint.getPose();
+        CoordX = position.getX();
+        CoordY = position.getY();
+        header = position.getHeading();
 
     }
 
 
     @Override
-    public void runOpMode() {
+    public void runOpMode () {
         InitWheels();
         InitAux();
         InitDc();
@@ -443,24 +456,34 @@ public class TeleOpMain extends LinearOpMode {
         InitServo();
 
         waitForStart();
-        loopTimer.reset();
-        timeBeforeLoop = 0;
+
         while (opModeIsActive()) {
-           // CalibrareEncoder();
+            if (Posspinner >= PosspinnerMin && Posspinner <= PosspinnerMax)
+                spinnerFar.setPosition(Posspinner);
             servoLogic();
             updateTelemetry();
             SetWheelsPower();
-            updateSpinner();
-//            pidSpinnerLogic();
             flywheelLogic();
             if (gamepad1.circleWasPressed()) {
                 intake.setPower(-1);
                 intakeMode = true;
                 outtakeMode = false;
+                ballsLoaded = 0;
+                spinnerFar.setPosition(0);
             }
 
-            if (intakeMode) {
-                updateCulori();
+            if (gamepad1.psWasPressed()) {
+                intake.setPower(1);
+            }
+
+            if (gamepad1.yWasPressed()) {
+                intake.setPower(0);
+            }
+
+            if (intakeMode && !outtakeMode) {
+                if (!spinnerBusy) {
+                    updateCulori();
+                }
                 colorDrivenSpinnerLogic();
             }
 
@@ -471,27 +494,25 @@ public class TeleOpMain extends LinearOpMode {
                 intake.setPower(0);
                 outtakeTimeout.reset();
 
-                integralSum = 0;
-                lastError = 0;
-                step = 0;
+                step1Done = false;
+                step2Done = false;
+                step3Done = false;
+                step4Done = false;
+                step5Done = false;
+                step6Done = false;
+                step7Done = false;
+                step8Done = false;
+                step9Done = false;
+                step10Done = false;
             }
 
             if (outtakeMode) {
                 runOuttake();
-                step = 0;
-            } else {
-                outtakeTimeout.reset();
-            }
-            if(gamepad1.dpadUpWasPressed()){
-                spinnerPos += SPINNER_60_DEG;
             }
             Localizare();
-            dt = (int)loopTimer.milliseconds() - timeBeforeLoop;
-            timeBeforeLoop = (int)loopTimer.milliseconds();
-            loopTimer.reset();
             idle();
         }
-            //ETC
+        //ETC
 
     }
 }
