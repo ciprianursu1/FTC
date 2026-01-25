@@ -13,11 +13,12 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
-@TeleOp(name = "&TeleOpMain")
-public class TeleOpMain extends LinearOpMode {
+@TeleOp(name = "&TeleOpMainBlueFar")
+public class TeleOpBlueFar extends LinearOpMode {
 
     int[] last5Sensor1 = new int[5];
     int[] last5Sensor2 = new int[5];
@@ -26,8 +27,6 @@ public class TeleOpMain extends LinearOpMode {
     int indexSensor1 = 0;
     int indexSensor2 = 0;
     int indexSensor3 = 0;
-    boolean spinnerBusy = false;
-    int spinnerbusyTime = 0;
 
 
     int[] slots = new int[3];
@@ -37,7 +36,12 @@ public class TeleOpMain extends LinearOpMode {
     int Color1 = 0;
     int Color2 = 0;
     int Color3 = 0;
-
+    int detectedBalls = 0;
+    int slotIntakeIndex = 0;
+    double prev_t = 0;
+    final int BLACK = 0;
+    final int PURPLE = 2;
+    final int GREEN = 1;
     ColorSensor colorsensorSLot1;
     ColorSensor colorsensorSLot2;
     ColorSensor colorsensorSLot3;
@@ -54,6 +58,7 @@ public class TeleOpMain extends LinearOpMode {
 
 
     boolean step1Done = false;
+    boolean turetaDisabled = false;
     boolean step2Done = false;
     boolean step3Done = false;
     boolean step4Done = false;
@@ -64,18 +69,19 @@ public class TeleOpMain extends LinearOpMode {
     boolean step9Done = false;
     boolean step10Done = false;
     boolean step11Done = false;
+    boolean spinIntake = false;
 
     Limelight3A limelight;
     IMU imu;
-
-    double DEG_PER_TICK = 360.0 / 383.6;
     boolean flywheelOn = false;
     boolean intakeMode = false;
+    boolean intakeReverse = false;
     boolean outtakeMode = false;
     private ElapsedTime spinnerTimeout = new ElapsedTime();
     private ElapsedTime outtakeTimeout = new ElapsedTime();
     double ejectorDown = 0.285;
     double ejectorUp = 0.005;
+    final double[] slotPositionsIntake = {0,0.19,0.38};
     PinpointLocalizer pinpoint;
     Pose pose;
     double CoordX, CoordY, header;
@@ -84,14 +90,49 @@ public class TeleOpMain extends LinearOpMode {
     double PosspinnerMax = 0.95;
     int ballsLoaded = 0;
 
-    static final double FLYWHEEL_TICKS_PER_REV = 384.5;
-    static final double TARGET_RPM = 180;
+    static final double FLYWHEEL_TICKS_PER_REV = 28;
+    static final double TARGET_RPM = 2471;
 
-    double flywheelPowerHigh = 0.6;
-    double flywheelPowerLow = 0.5;
+    double flywheelPowerHigh = 0.65;
+    double flywheelPowerLow = 0.55;
 
     double flywheelTolerance = 20; // RPM
+    private static final double MOTOR_TICKS_PER_REV = 384.5;
+    private static final double MOTOR_TO_TURRET_RATIO = 76.0 / 24.0;
 
+    private static final double DEG_PER_TICK_TURETS =
+            360.0 / (MOTOR_TICKS_PER_REV * MOTOR_TO_TURRET_RATIO);
+
+    // Turret soft limits (degrees)
+    private static final double LEFT_LIMIT  = -110;
+    private static final double RIGHT_LIMIT = 110;
+
+    // Control
+    private static final double kP = 0.015;
+    private static final double MAX_POWER = 0.2;
+
+    /* ================= LOCALIZATION ================= */
+
+    private Pose startPose;
+
+    private double pX, pY;
+
+    /* ================= TARGET ================= */
+
+    // Example target (field coordinates)
+    private double xC = 0;
+    private double yC = 144;
+
+
+    private void initLocalization() {
+        pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
+        startPose = new Pose(64, 9, Math.toRadians(-36));
+        pinpoint.setStartPose(startPose);
+    }
+    private void resetLocalization(){
+        Pose pose = new Pose(64, 9, Math.toRadians(-36));
+        pinpoint.setPose(pose);
+    }
 
     private void InitWheels() {
         front_left = hardwareMap.dcMotor.get("lf");
@@ -108,17 +149,77 @@ public class TeleOpMain extends LinearOpMode {
     private void InitDc() {
 
         intake = hardwareMap.get(DcMotor.class, "intake");
-        tureta = hardwareMap.get(DcMotorEx.class, "tureta");
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
 
-        tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        tureta = hardwareMap.get(DcMotorEx.class, "tureta");
         tureta.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
+        tureta.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
+        tureta.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
 
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
     }
+    private double normalizeAngle(double angle) {
+        while (angle > 180) angle -= 360;
+        while (angle < -180) angle += 360;
+        return angle;
+    }
+
+    private void updateTurretAim() {
+
+        Pose pose = pinpoint.getPose();
+        pX = pose.getX();
+        pY = pose.getY();
+
+        // Vector robot -> target (field frame)
+        double dx = xC - pX;
+        double dy = yC - pY;
+
+        // Absolute field angle to target
+        double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
+
+        // Robot heading
+        double robotHeading = Math.toDegrees(pose.getHeading());
+        double currentTurretDeg = tureta.getCurrentPosition() * DEG_PER_TICK_TURETS-180.0;
+        double targetTurretDeg = normalizeAngle(fieldAngle - robotHeading);
+        // Desired turret angle (robot frame, UNCLIPPED)
+        if(Math.abs(targetTurretDeg) < RIGHT_LIMIT || turetaDisabled){
+            targetTurretDeg = -180;
+            tureta.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+            tureta.setPower(0);
+            return;
+        }
+
+        // Current turret angle
+
+
+        currentTurretDeg=normalizeAngle(currentTurretDeg);
+        // Error
+        double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
+
+        // P control
+        double power = error * kP;
+
+        // ====== LIMIT SAFETY (THIS FIXES THE JUMPING) ======
+
+//        if (currentTurretDeg <= RIGHT_LIMIT && power > 0) {
+//            power = 0;
+//        }
+//        if (currentTurretDeg >= LEFT_LIMIT && power < 0) {
+//            power = 0;
+//        }
+
+
+        power = Range.clip(power, -MAX_POWER, MAX_POWER);
+        tureta.setPower(power);
+
+        telemetry.addData("Target (raw)", "%.1f", targetTurretDeg);
+        telemetry.addData("Turret", "%.1f", currentTurretDeg);
+        telemetry.addData("Error", "%.1f", error);
+        telemetry.addData("Power", "%.2f", power);
+    }
+
 
     private void InitServo() {
         ejector = hardwareMap.get(Servo.class, "ejector");//0.285 down 0.005 up
@@ -197,7 +298,7 @@ public class TeleOpMain extends LinearOpMode {
     }
 
 
-    private int smekerie(ColorSensor colorSensor) {
+    private int smekerie1(ColorSensor colorSensor) {
         int r = colorSensor.red();
         int g = colorSensor.green();
         int b = colorSensor.blue();
@@ -214,27 +315,28 @@ public class TeleOpMain extends LinearOpMode {
         return detected;
     }
 
-    private int CuloareFinala(ColorSensor sensor, int[] last5, int index) {
-        last5[index] = smekerie(sensor);
+    private int CuloareFinala1(ColorSensor sensor, int[] last5, int index) {
+        last5[index] = smekerie1(sensor);
 
         int count1 = 0, count2 = 0;
         for (int v : last5) {
-            if (v == 1) count1++;
-            else if (v == 2) count2++;
+            if (v == GREEN) count1++;
+            else if (v == PURPLE) count2++;
         }
 
-        if (count1 >= 3) return 1;
-        if (count2 >= 3) return 2;
+        if (count1 >= 3) return GREEN;
+        if (count2 >= 3) return PURPLE;
         return 0;
     }
 
 
+
     private void updateCulori() {
-        Color1 = CuloareFinala(colorsensorSLot1, last5Sensor1, indexSensor1);
+        Color1 = CuloareFinala1(colorsensorSLot1, last5Sensor1, indexSensor1);
         indexSensor1 = (indexSensor1 + 1) % 5;
-        Color2 = CuloareFinala(colorsensorSLot2, last5Sensor2, indexSensor2);
+        Color2 = CuloareFinala1(colorsensorSLot2, last5Sensor2, indexSensor2);
         indexSensor2 = (indexSensor2 + 1) % 5;
-        Color3 = CuloareFinala(colorsensorSLot3, last5Sensor3, indexSensor3);
+        Color3 = CuloareFinala1(colorsensorSLot3, last5Sensor3, indexSensor3);
         indexSensor3 = (indexSensor3 + 1) % 5;
     }
 
@@ -265,8 +367,16 @@ public class TeleOpMain extends LinearOpMode {
         if (gamepad1.touchpadWasPressed())
             Posspinner = 0;
         //0.19=60 de grade
-        if (gamepad1.dpadRightWasPressed()) Posspinner = Posspinner + 0.19;
-        if (gamepad1.dpadLeftWasPressed()) Posspinner = Posspinner - 0.19;
+        if (gamepad1.dpadRightWasPressed()) {
+            slotIntakeIndex++;
+            slotIntakeIndex = slotIntakeIndex % 3;
+            Posspinner = slotPositionsIntake[slotIntakeIndex];
+        }
+        if (gamepad1.dpadLeftWasPressed()){
+            slotIntakeIndex--;
+            if(slotIntakeIndex < 0) slotIntakeIndex = 2;
+            Posspinner = slotPositionsIntake[slotIntakeIndex];
+        }
     }
 
     private boolean spinnerFull() {
@@ -292,23 +402,13 @@ public class TeleOpMain extends LinearOpMode {
 
     private void colorDrivenSpinnerLogic() {
 
-        if (spinnerFull()) return;
-        int detectedBalls = 0;
+        // if (spinnerFull()) return;
+        detectedBalls = 0;
         if (Color1 != 0) detectedBalls++;
         if (Color2 != 0) detectedBalls++;
         if (Color3 != 0) detectedBalls++;
-        if (spinnerBusy) {
-            if(spinnerbusyTime == 0) {
-                spinnerbusyTime = (int) spinnerTimeout.milliseconds();
-            } else
-            if(spinnerTimeout.milliseconds() - spinnerbusyTime >= 150) {
-                spinnerBusy = false;
-                spinnerbusyTime = 0;
-            }
-            return;
 
-        }
-        if (Color1!=0) {
+        if (Color1!=0 && spinnerTimeout.milliseconds() >= 100) {
 
             switch (detectedBalls) {
                 case 1:
@@ -318,34 +418,13 @@ public class TeleOpMain extends LinearOpMode {
                     Posspinner = 0.38;
                     break;
                 case 3:
-                    Posspinner = 0.38+0.19;
+                    Posspinner = 0.085;
                     break;
             }
-            if (detectedBalls != 0) spinnerBusy = true;
 
             spinnerTimeout.reset();
         }
     }
-
-
-
-
-
-        /*
-            private void rotateSlotsRight() {
-                int temp = slots2[2];
-                slots2[2] = slots2[1];
-                slots2[1] = slots2[0];
-                slots2[0] = temp;
-            }
-
-            private void rotateSlotsLeft() {
-                int temp = slots2[0];
-                slots2[0] = slots2[1];
-                slots2[1] = slots2[2];
-                slots2[2] = temp;
-            }
-        */
 
 
     private void updateTelemetry() {
@@ -359,18 +438,31 @@ public class TeleOpMain extends LinearOpMode {
             telemetry.addData("Slot 2", Color2);
             telemetry.addData("Slot 3", Color3);
         }
+
         telemetry.addData("timp_intake", spinnerTimeout.time());
         telemetry.addData("timp_outtake", outtakeTimeout.time());
         telemetry.addData("x", CoordX);
         telemetry.addData("y", CoordY);
         telemetry.addData("heading", header);
         telemetry.addData("unghiSPinner", spinnerFar.getPosition());
-        telemetry.addData("close", spinnerCLose.getPosition());
+        telemetry.addData("balls",detectedBalls);
+
+        telemetry.addData("Sensor 1a", colorsensorSLot1.alpha());
+        telemetry.addData("Sensor 2a", colorsensorSLot2.alpha());
+        telemetry.addData("Sensor 3a", colorsensorSLot3.alpha());
+        telemetry.addData("Sensor 1",getHue(colorsensorSLot1.red(),colorsensorSLot1.green(),colorsensorSLot1.blue()));
+        telemetry.addData("Sensor 2",getHue(colorsensorSLot2.red(),colorsensorSLot2.green(), colorsensorSLot2.blue()));
+        telemetry.addData("Sensor 3",getHue(colorsensorSLot3.red(),colorsensorSLot3.green(), colorsensorSLot3.blue()));
         telemetry.update();
     }
 
 
     private void runOuttake() {
+        intake.setPower(-1);
+        final int EJECTOR_UP_DELAY = 400;
+        final int EJECTOR_DOWN_DELAY = 400;
+        final int SPINNER_SLOT_CHANGE_DELAY = 400;
+        final int INITIAL_DELAY = 400;
 
         slots[0] = Color1;
         slots[1] = Color2;
@@ -380,71 +472,73 @@ public class TeleOpMain extends LinearOpMode {
         Color2 = 0;
         Color3 = 0;
 
+
         double t = outtakeTimeout.milliseconds();
 
-        if (t >= 10 && !step1Done) {
-            Posspinner = 0.095;
+        if (t - prev_t >= 10 && !step1Done) {
+            Posspinner = 0.085;// 0.1
             step1Done = true;
+            prev_t = 10;
         }
 
-        if (t >= 1000 && !step2Done) {
+        if (t >= prev_t + INITIAL_DELAY && !step2Done && step1Done) {
             ejector.setPosition(ejectorUp);
             step2Done = true;
+            prev_t += INITIAL_DELAY;
         }
 
-        if (t >= 2000 && !step3Done) {
+        if (t >= prev_t + EJECTOR_UP_DELAY && !step3Done && step2Done) {
             ejector.setPosition(ejectorDown);
             step3Done = true;
+            prev_t += EJECTOR_UP_DELAY;
         }
 
-        if (t >= 4000 && !step4Done) {
-            Posspinner = 0.29;
+        if (t >= prev_t + EJECTOR_DOWN_DELAY && !step4Done && step3Done) {
+            Posspinner = 0.28; // 0.29
             step4Done = true;
+            prev_t += EJECTOR_DOWN_DELAY;
         }
 
-        if (t >= 6000 && !step5Done) {
+        if (t >= prev_t + SPINNER_SLOT_CHANGE_DELAY && !step5Done && step4Done) {
             ejector.setPosition(ejectorUp);
             step5Done = true;
+            prev_t += SPINNER_SLOT_CHANGE_DELAY;
         }
 
-        if (t >= 8000 && !step6Done) {
+        if (t >= prev_t + EJECTOR_UP_DELAY && !step6Done  && step5Done) {
             ejector.setPosition(ejectorDown);
             step6Done = true;
+            prev_t += EJECTOR_UP_DELAY;
         }
 
-        if (t >= 10000 && !step7Done) {
-            Posspinner = 0.49;
+        if (t >= prev_t + EJECTOR_DOWN_DELAY && !step7Done && step6Done) {
+            Posspinner = 0.46;// 0.48
             step7Done = true;
+            prev_t += EJECTOR_DOWN_DELAY;
         }
 
-        if (t >= 12000 && !step8Done) {
+        if (t >= prev_t + SPINNER_SLOT_CHANGE_DELAY  && !step8Done && step7Done) {
             ejector.setPosition(ejectorUp);
             step8Done = true;
+            prev_t += SPINNER_SLOT_CHANGE_DELAY;
         }
 
-        if (t >= 14000 && !step9Done) {
+        if (t >= prev_t + EJECTOR_UP_DELAY && !step9Done && step8Done) {
             ejector.setPosition(ejectorDown);
             step9Done = true;
+            prev_t += EJECTOR_UP_DELAY;
         }
-        if (t >= 16000 && !step10Done) {
+        if (t >= prev_t + EJECTOR_DOWN_DELAY && !step10Done && step9Done) {
             Posspinner = 0;
             step10Done = true;
             outtakeMode = false;
             intakeMode = false;
             ballsLoaded = 0;
+            prev_t = 0;
         }
     }
 
 
-    private void Localizare ()
-    {
-        pinpoint.update();
-        Pose position = pinpoint.getPose();
-        CoordX = position.getX();
-        CoordY = position.getY();
-        header = position.getHeading();
-
-    }
 
 
     @Override
@@ -454,41 +548,61 @@ public class TeleOpMain extends LinearOpMode {
         InitDc();
         InitLL();
         InitServo();
+        initLocalization();
 
         waitForStart();
 
         while (opModeIsActive()) {
-            if (Posspinner >= PosspinnerMin && Posspinner <= PosspinnerMax)
+            if (Posspinner >= PosspinnerMin && Posspinner <= PosspinnerMax) {
                 spinnerFar.setPosition(Posspinner);
+                spinnerCLose.setPosition(Posspinner);
+            }
+
             servoLogic();
             updateTelemetry();
             SetWheelsPower();
             flywheelLogic();
+            pinpoint.update();
+            updateTurretAim();
+
+            telemetry.addData("X", "%.1f", pX);
+            telemetry.addData("Y", "%.1f", pY);
+            telemetry.addData("Heading", "%.1f",
+                    Math.toDegrees(pinpoint.getPose().getHeading()));
+            if (gamepad1.crossWasPressed()  && !gamepad1.crossWasReleased()){
+                intake.setPower(1);
+            } else if (gamepad1.crossWasReleased()) {
+                intake.setPower(spinIntake ? -1:0);
+            }
             if (gamepad1.circleWasPressed()) {
                 intake.setPower(-1);
                 intakeMode = true;
+                spinIntake = !spinIntake;
+                intake.setPower(spinIntake ? -1: 0);
                 outtakeMode = false;
                 ballsLoaded = 0;
                 spinnerFar.setPosition(0);
             }
 
-            if (gamepad1.psWasPressed()) {
-                intake.setPower(1);
-            }
+//                    if (gamepad1.psWasPressed()) {
+//                        intake.setPower(1);
+//                    }
 
             if (gamepad1.yWasPressed()) {
                 intake.setPower(0);
             }
 
+
             if (intakeMode && !outtakeMode) {
-                if (!spinnerBusy) {
-                    updateCulori();
-                }
+                updateCulori();
                 colorDrivenSpinnerLogic();
             }
+            if(gamepad1.psWasPressed()){
+                resetLocalization();
 
+            }
 
-            if (gamepad1.squareWasPressed()) {
+            if (gamepad1.right_trigger > 0.8) {
                 outtakeMode = true;
                 intakeMode = false;
                 intake.setPower(0);
@@ -505,11 +619,16 @@ public class TeleOpMain extends LinearOpMode {
                 step9Done = false;
                 step10Done = false;
             }
+            if (gamepad1.yWasPressed()  && !gamepad1.yWasReleased()){
+                turetaDisabled = true;
+            } else if (gamepad1.yWasReleased()) {
+                turetaDisabled = false;
+                tureta.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            }
 
             if (outtakeMode) {
                 runOuttake();
             }
-            Localizare();
             idle();
         }
         //ETC
