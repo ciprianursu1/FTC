@@ -14,10 +14,10 @@ public class Turret {
     MotorEx launcher;
     MotorEx turretAngler;
     Servo trajectoryAngleModifier;
-    final double absoluteTurretHeight = 0.4; //meters
-    final double absoluteTargetHeight = 0.9; //meters
+    final double absoluteTurretHeight = 0.35; //meters
+    final double absoluteTargetHeight = 1.1; //meters
     final double relativeHeight = absoluteTargetHeight - absoluteTurretHeight;
-    final double prefferedMaxHeightThrow = 1.6; //meters (relative to turret height)
+    final double prefferedMaxHeightThrow = 1.2; //meters (relative to turret height)
     final double kP = 0.015;
     final double launcherEfficiency = 0.5; // needs experimenting
     final double flywheelRadius = 0.048;
@@ -36,6 +36,7 @@ public class Turret {
     final double turretOffsetX = 0.0;
     final double turretOffsetY = 0.0;
     Pose robotLocation = new Pose();
+    boolean enable = false;
     double targetX = 0.0;
     double targetY = 0.0;
     double turretX = 0.0;
@@ -172,9 +173,16 @@ public class Turret {
         robotLocation = Pinpoint.getPose();
     }
     public void update(){
+        if(!enable) return;
         updateTurretAim();
         updatePose();
         computeParameters();
         updateLauncher();
+    }
+    public void enable(){
+        enable = true;
+    }
+    public void disable(){
+        enable = false;
     }
 }

@@ -14,24 +14,29 @@ public class DriveTrain {
 
     private final Gamepad gamepad;
 
-    public DriveTrain(HardwareMap hardwareMap, Gamepad gamepad) {
+    public DriveTrain(HardwareMap hardwareMap, Gamepad gamepad, String front_left, String front_right, String back_left, String back_right) {
         this.gamepad = gamepad;
 
-        front_left = hardwareMap.dcMotor.get("leftFront");
-        front_right = hardwareMap.dcMotor.get("rightFront");
-        back_left = hardwareMap.dcMotor.get("leftRear");
-        back_right = hardwareMap.dcMotor.get("rightRear");
+        this.front_left = hardwareMap.get(DcMotor.class,front_left);
+        this.front_right = hardwareMap.get(DcMotor.class,front_right);
+        this.back_left = hardwareMap.get(DcMotor.class,back_left);
+        this.back_right = hardwareMap.get(DcMotor.class,back_right);
 
-        front_right.setDirection(DcMotorSimple.Direction.REVERSE);
-        back_right.setDirection(DcMotorSimple.Direction.REVERSE);
-        front_left.setDirection(DcMotorSimple.Direction.FORWARD);
-        back_left.setDirection(DcMotorSimple.Direction.FORWARD);
+
     }
-
-    public void runDrive() {
-        while (true) {  // va rula cât timp thread-ul e activ (controlat din TeleOpMain)
+    public void init() {
+        this.front_right.setDirection(DcMotorSimple.Direction.REVERSE);
+        this.back_right.setDirection(DcMotorSimple.Direction.REVERSE);
+        this.front_left.setDirection(DcMotorSimple.Direction.FORWARD);
+        this.back_left.setDirection(DcMotorSimple.Direction.FORWARD);
+        back_left.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        back_right.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        front_left.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        front_right.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+    }
+    public void update() {
             double left_x  = gamepad.left_stick_x;
-            double left_y  = -gamepad.left_stick_y; // forward is negative
+            double left_y  = -gamepad.left_stick_y;
             double right_x = gamepad.right_stick_x;
 
             double front_left_pw  = left_y + left_x + right_x;
@@ -56,4 +61,3 @@ public class DriveTrain {
             back_right.setPower(back_right_pw);
         }
     }
-}

@@ -4,33 +4,99 @@ import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
-@TeleOp(name = "TeleOPBlueClose")
+@TeleOp(name = "TeleOPBlueClose", group = "TeleOp")
 public class TeleOpBC extends LinearOpMode {
-    Spindexer spinner;
-    Turret tureta;
-    Intake intake;
-    final private Pose startPose = new Pose(64.0,8.0,90);
-    PinpointLocalizer pinpoint;
-    public void runOpMode(){
-        spinner = new Spindexer(hardwareMap,
-                "spinnerClose","spinnerFar",
+    private Spindexer spindexer;
+    private Turret turret;
+    private Intake intake;
+    private DriveTrain drive;
+    private final Pose startPose = new Pose(64.0, 8.0, Math.toRadians(90));
+
+    // State variables
+    private boolean intakeActive = false;
+    private boolean turretEnabled = false;
+
+    // Edge detection
+    private boolean lastDpadUp = false;
+    private boolean lastB = false;
+    private boolean lastA = false;
+
+    @Override
+    public void runOpMode() {
+        PinpointLocalizer pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
+        spindexer = new Spindexer(hardwareMap,
+                "spinnerClose", "spinnerFar",
                 "ejector",
-                "Color1", "Color2","Color3"
+                "Color1", "Color2", "Color3"
         );
-        pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
         pinpoint.setStartPose(startPose);
-        tureta = new Turret(hardwareMap,"flywheel","tureta","unghituretaoy",pinpoint);
-        intake = new Intake(hardwareMap,"intake");
+        turret = new Turret(hardwareMap, "flywheel", "tureta", "unghituretaoy", pinpoint);
+        intake = new Intake(hardwareMap, "intake");
+        drive = new DriveTrain(hardwareMap, gamepad1, "fl", "fr", "rl", "rr");
+
         intake.init();
-        spinner.init();
-        tureta.init(0.0,144.0);
-        while (opModeIsActive()){
-            spinner.update();
-            tureta.update();
+        spindexer.init();
+        drive.init();
+        turret.init(0.0, 144.0);
+        
+        telemetry.addLine("Welcome to CIP Airlines");
+        telemetry.addLine("Status: Initialized");
+        telemetry.update();
+
+        waitForStart();
+
+        while (opModeIsActive()) {
+            drive.update();
+
+            // Dpad Up: Toggle intake motor
+            if (gamepad1.dpad_up && !lastDpadUp) {
+                intakeActive = !intakeActive;
+            }
+            lastDpadUp = gamepad1.dpad_up;
+
+            // Dpad Down: Hold to reverse intake
+            if (gamepad1.dpad_down) {
+                intake.setPower(1.0);
+            } else if (intakeActive) {
+                intake.setPower(-1.0);
+            } else {
+                intake.setPower(0);
+            }
+
+            if (gamepad2.right_trigger > 0.75) {
+                spindexer.spindexerState = Spindexer.SpindexerState.OUTTAKE;
+            }
+
+            if (gamepad2.b && !lastB) {
+                spindexer.spindexerState = Spindexer.SpindexerState.INTAKE;
+                intakeActive = true;
+            }
+            lastB = gamepad2.b;
+
+            if (gamepad2.a && !lastA) {
+                turretEnabled = !turretEnabled;
+                if (turretEnabled) {
+                    turret.enable();
+                } else {
+                    turret.disable();
+                }
+            }
+            lastA = gamepad2.a;
+            spindexer.update();
+            turret.update();
+
+            Pose currentPose = pinpoint.getPose();
+            telemetry.addData("X", currentPose.getX());
+            telemetry.addData("Y", currentPose.getY());
+            telemetry.addData("Heading", Math.toDegrees(currentPose.getHeading()));
+            telemetry.addData("Spindexer State", spindexer.spindexerState);
+            telemetry.addData("Intake Active", intakeActive);
+            telemetry.addData("Turret Enabled", turretEnabled);
+            telemetry.addData("Flywheel Target RPM", turret.flywheelTargetRPM);
+            telemetry.update();
         }
     }
 }
