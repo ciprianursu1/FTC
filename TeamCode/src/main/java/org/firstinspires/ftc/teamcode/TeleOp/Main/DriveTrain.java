@@ -11,7 +11,8 @@ public class DriveTrain {
     DcMotor front_right;
     DcMotor back_left;
     DcMotor back_right;
-
+    final double DEADZONE = 0.08;
+    double powerMultiplier = 1.0;
     private final Gamepad gamepad;
 
     public DriveTrain(HardwareMap hardwareMap, Gamepad gamepad, String front_left, String front_right, String back_left, String back_right) {
@@ -35,9 +36,9 @@ public class DriveTrain {
         front_right.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
     }
     public void update() {
-            double left_x  = gamepad.left_stick_x;
-            double left_y  = -gamepad.left_stick_y;
-            double right_x = gamepad.right_stick_x;
+            double left_x  = squareInput(deadzone(gamepad.left_stick_x));
+            double left_y  = squareInput(deadzone(-gamepad.left_stick_y));
+            double right_x = squareInput(deadzone(gamepad.right_stick_x));
 
             double front_left_pw  = left_y + left_x + right_x;
             double back_left_pw   = left_y - left_x + right_x;
@@ -55,9 +56,19 @@ public class DriveTrain {
                 back_right_pw  /= max;
             }
 
-            front_left.setPower(front_left_pw);
-            back_left.setPower(back_left_pw);
-            front_right.setPower(front_right_pw);
-            back_right.setPower(back_right_pw);
+            front_left.setPower(front_left_pw * powerMultiplier);
+            back_left.setPower(back_left_pw * powerMultiplier);
+            front_right.setPower(front_right_pw * powerMultiplier);
+            back_right.setPower(back_right_pw * powerMultiplier);
         }
+    private double deadzone(double value) {
+        return Math.abs(value) < DEADZONE ? 0.0 : (value - Math.copySign(DEADZONE, value)) / (1.0 - DEADZONE);
     }
+    public void setPowerMultiplier(double powerMultiplier){
+        this.powerMultiplier = powerMultiplier;
+    }
+    private double squareInput(double v) {
+        return Math.copySign(v * v, v);
+    }
+    }
+

@@ -7,7 +7,7 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 import org.firstinspires.ftc.teamcode.TeleOp.SensorV2;
 import org.firstinspires.ftc.teamcode.TeleOp.SensorV3;
 
-import java.io.BufferedInputStream;
+import java.util.Arrays;
 
 public class Spindexer {
     Servo SlotChanger1;
@@ -40,9 +40,20 @@ public class Spindexer {
     private boolean waiting = false;
     private int waitDuration = 0;
     public SpindexerState spindexerState = SpindexerState.INTAKE;
+    public boolean SlotChangerFull = false;
     private int currentOuttakeStep = 0;
     private int CurrentSlot = 0;
     private int ballsLoaded = 0;
+    private int motifIndex = 0;
+    private int nextOuttakeSlot = -1;
+    private boolean enabledSorting = true;
+    private boolean intakeDetectedPrev = false;
+    private boolean aux1DetectedPrev = false;
+    private boolean aux2DetectedPrev = false;
+    private final int DEBOUNCE_MS = 20; // milliseconds to confirm a reading
+    private ElapsedTime intakeTimer = new ElapsedTime();
+    private ElapsedTime aux1Timer = new ElapsedTime();
+    private ElapsedTime aux2Timer = new ElapsedTime();
     Spindexer(HardwareMap hwMap,String SlotChanger1Name,String SlotChanger2Name, String OuttakeTransferName,String IntakeSensorName,String AuxSensor1Name,String AuxSensor2Name){
         SlotChanger1 = hwMap.get(Servo.class,SlotChanger1Name);
         SlotChanger2 = hwMap.get(Servo.class,SlotChanger2Name);
@@ -70,18 +81,37 @@ public class Spindexer {
             case INTAKE:
                 activateColorSensors();
                 updateColorSensors();
-                ballsLoaded = 0;
-                if(IntakeSensor.getDetectedColor() != Sample.Colors.NONE && ballsLoaded < 3){
-                    IntakeSlotColors[ballsLoaded++] = IntakeSensor.getDetectedColor();
+                boolean intakeDetected = IntakeSensor.getDetectedColor() != Sample.Colors.NONE;
+                boolean aux1Detected = AuxSensor1.getDetectedColor() != Sample.Colors.NONE;
+                boolean aux2Detected = AuxSensor2.getDetectedColor() != Sample.Colors.NONE;
+                if (intakeDetected && !intakeDetectedPrev) intakeTimer.reset();
+                if (intakeDetected && intakeTimer.milliseconds() >= DEBOUNCE_MS) {
+                    IntakeSlotColors[0] = IntakeSensor.getDetectedColor();
+                    intakeDetectedPrev = true;
+                } else if (!intakeDetected) {
+                    intakeDetectedPrev = false;
                 }
-                if(AuxSensor1.getDetectedColor() != Sample.Colors.NONE && ballsLoaded < 3){
-                    IntakeSlotColors[ballsLoaded++] = AuxSensor1.getDetectedColor();
-                }
-                if(AuxSensor2.getDetectedColor() != Sample.Colors.NONE && ballsLoaded < 3){
-                    IntakeSlotColors[ballsLoaded++] = AuxSensor2.getDetectedColor();
+                if (aux1Detected && !aux1DetectedPrev) aux1Timer.reset();
+                if (aux1Detected && aux1Timer.milliseconds() >= DEBOUNCE_MS) {
+                    IntakeSlotColors[1] = AuxSensor1.getDetectedColor();
+                    aux1DetectedPrev = true;
+                } else if (!aux1Detected) {
+                    aux1DetectedPrev = false;
                 }
 
+                if (aux2Detected && !aux2DetectedPrev) aux2Timer.reset();
+                if (aux2Detected && aux2Timer.milliseconds() >= DEBOUNCE_MS) {
+                    IntakeSlotColors[2] = AuxSensor2.getDetectedColor();
+                    aux2DetectedPrev = true;
+                } else if (!aux2Detected) {
+                    aux2DetectedPrev = false;
+                }
+                ballsLoaded = (IntakeSlotColors[0] != Sample.Colors.NONE ? 1 : 0)+ (IntakeSlotColors[1] != Sample.Colors.NONE ? 1 : 0) + (IntakeSlotColors[2] != Sample.Colors.NONE ? 1 : 0);
+
                 switch (ballsLoaded){
+                    case 0:
+                        SlotChangerPos = IntakeSlotPositions[0];
+                        break;
                     case 1:
                         SlotChangerPos = IntakeSlotPositions[1];
                         break;
@@ -90,16 +120,38 @@ public class Spindexer {
                         break;
                     case 3:
                         SlotChangerPos = OuttakeSlotPositions[0];
+                        SlotChangerFull = true;
                         break;
                 }
+                stateBeforeSlotChange = SpindexerState.INTAKE;
                 break;
             case OUTTAKE:
                 deactivateColorSensors();
+                if (stateBeforeSlotChange == SpindexerState.INTAKE) {
+                    mapIntakeToOuttakeSlots();
+                    Arrays.fill(IntakeSlotColors, Sample.Colors.NONE);
+                }
+                stateBeforeSlotChange = spindexerState;
                 switch (currentOuttakeStep++){
+                    case 0:
+                    case 3:
+                    case 6:
+                    case 9:
+                        selectNextOuttakeSlot();
+                        if (nextOuttakeSlot != -1) {
+                            SlotChangerPos = OuttakeSlotPositions[nextOuttakeSlot];
+                        } else {
+                            SlotChangerPos = IntakeSlotPositions[0];
+                            currentOuttakeStep = 0;
+                            ballsLoaded = 0;
+                            spindexerState = SpindexerState.INTAKE;
+                        }
+                        break;
                     case 1:
                     case 4:
                     case 7:
                         OuttakeTransfer.setPosition(OuttakeTransferUpPos);
+                        OuttakeSlotColors[nextOuttakeSlot] = Sample.Colors.NONE;
                         startDelay(TransferUpDelay);
                         break;
                     case 2:
@@ -107,16 +159,6 @@ public class Spindexer {
                     case 8:
                         OuttakeTransfer.setPosition(OuttakeTransferDownPos);
                         startDelay(TransferDownDelay);
-                        break;
-                    case 3:
-                        SlotChangerPos = OuttakeSlotPositions[1];
-                        break;
-                    case 6:
-                        SlotChangerPos = OuttakeSlotPositions[2];
-                        break;
-                    case 9:
-                        SlotChangerPos = IntakeSlotPositions[0];
-                        currentOuttakeStep = 0;
                         break;
                 }
                 break;
@@ -138,31 +180,15 @@ public class Spindexer {
         AuxSensor1.updateColor();
         AuxSensor2.updateColor();
     }
-    private void rotateSlotChangerCCW() {
-        switch (spindexerState){
-            case INTAKE:
-                setSlotChangerPos(IntakeSlotPositions[CurrentSlot%3]);
-                break;
-            case OUTTAKE:
-                setSlotChangerPos(OuttakeSlotPositions[CurrentSlot%3]);
-                break;
-        }
+    public void enableSorting(){
+        enabledSorting = true;
     }
-    private void rotateSlotChangerCW() {
-        switch (spindexerState){
-            case OUTTAKE:
-                setSlotChangerPos(OuttakeSlotPositions[++CurrentSlot%3]);
-                break;
-            case INTAKE:
-                setSlotChangerPos(IntakeSlotPositions[++CurrentSlot%3]);
-                break;
-
-        }
-
+    public void disableSorting(){
+        enabledSorting = false;
     }
 
     private void setSlotChangerPos(double pos){
-        if(Math.abs(SlotChanger1.getPosition() - pos) > SlotChangerPosPerDegree) return;
+        if(Math.abs(SlotChanger1.getPosition() - pos) < SlotChangerPosPerDegree) return;
         if(pos > 1.0) pos = 1.0;
         else if (pos < 0) pos = 0;
         SlotChanger1.setPosition(pos);
@@ -174,4 +200,32 @@ public class Spindexer {
         waitDuration = milliseconds;
         waiting = true;
     }
+    private void mapIntakeToOuttakeSlots() {
+        for (int i = 0; i < 3; i++) {
+            OuttakeSlotColors[2 - i] = IntakeSlotColors[i];
+        }
+    }
+    private void selectNextOuttakeSlot() {
+        nextOuttakeSlot = -1;
+        if(enabledSorting) {
+            for (int i = 0; i < 3; i++) {
+                if (OuttakeSlotColors[i] == Motif[motifIndex]) {
+                    nextOuttakeSlot = i;
+                    break;
+                }
+            }
+            motifIndex = (motifIndex + 1) % Motif.length;
+        }
+
+        // If no match, just take the next available ball
+        if (nextOuttakeSlot == -1) {
+            for (int i = 0; i < 3; i++) {
+                if (OuttakeSlotColors[i] != Sample.Colors.NONE) {
+                    nextOuttakeSlot = i;
+                    break;
+                }
+            }
+        }
+    }
+
 }

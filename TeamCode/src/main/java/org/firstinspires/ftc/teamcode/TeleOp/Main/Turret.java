@@ -14,16 +14,19 @@ public class Turret {
     MotorEx launcher;
     MotorEx turretAngler;
     Servo trajectoryAngleModifier;
+    final double[][] launchZoneBig = {{-18,144},{162,144},{72,55}};
+    final double[][] launchZoneSmall = {{40,0},{102,0},{72,32}};
+    final double maxLauncherPower = 0.7;
     final double absoluteTurretHeight = 0.35; //meters
     final double absoluteTargetHeight = 1.1; //meters
     final double relativeHeight = absoluteTargetHeight - absoluteTurretHeight;
-    final double prefferedMaxHeightThrow = 1.2; //meters (relative to turret height)
+    final double prefferedMaxHeightThrow = relativeHeight + 0.3; //meters (relative to turret height)
     final double kP = 0.015;
     final double launcherEfficiency = 0.5; // needs experimenting
     final double flywheelRadius = 0.048;
     final double g = 9.81;
     final double maxTurretAnglerPower = 0.2;
-    final double trajectoryAngleModifierGearRatio = 4.0;
+    final double trajectoryAngleModifierGearRatio = 112.0/24.0;
     final double turretAnglerGearRatio = 76/24.0;
     final double turretAnglerDegPerTick = 360/(384.5*turretAnglerGearRatio);
     final double trajectoryAnglerMaxTravel = 300.0;
@@ -35,8 +38,11 @@ public class Turret {
     final double turretLimitRight = 110;
     final double turretOffsetX = 0.0;
     final double turretOffsetY = 0.0;
+    final double launcherStartRPM = 3000.0;
+    final int maxFlywheelRPM = 6000;
     Pose robotLocation = new Pose();
-    boolean enable = false;
+    boolean aimingEnabled = false;
+    boolean launcherEnabled = false;
     double targetX = 0.0;
     double targetY = 0.0;
     double turretX = 0.0;
@@ -84,8 +90,10 @@ public class Turret {
 
         double currentTurretDeg = turretAngler.getCurrentPosition() * turretAnglerDegPerTick + startTurretAngle;
         double targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
-        if((targetTurretDeg < 0 && targetTurretDeg > turretLimitLeft) || (targetTurretDeg >= 0 && targetTurretDeg < turretLimitRight)){
-            targetTurretDeg = startTurretAngle;
+        if(targetTurretDeg < 0 && targetTurretDeg > turretLimitLeft){
+            targetTurretDeg = turretLimitLeft;
+        } else if (targetTurretDeg >= 0 && targetTurretDeg < turretLimitRight) {
+            targetTurretDeg = turretLimitRight;
         }
         currentTurretDeg=normalizeAngle(currentTurretDeg);
         double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
@@ -96,7 +104,7 @@ public class Turret {
     }
     private void computeParameters() {
 
-        double d = Math.hypot(targetX - turretX, targetY - turretY);
+        double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
 
         if (d <= 0 || prefferedMaxHeightThrow <= 0) {
             return;
@@ -158,8 +166,8 @@ public class Turret {
                     Math.sqrt(2 * g * prefferedMaxHeightThrow) / sinTerm;
 
             flywheelTargetRPM =
-                    (int)(60 * exitVelocity
-                            / (2 * Math.PI * flywheelRadius * launcherEfficiency));
+                    Math.min((int)(60 * exitVelocity
+                            / (2 * Math.PI * flywheelRadius * launcherEfficiency)),maxFlywheelRPM);
         }
     }
 
@@ -173,16 +181,59 @@ public class Turret {
         robotLocation = Pinpoint.getPose();
     }
     public void update(){
-        if(!enable) return;
-        updateTurretAim();
+        if(!aimingEnabled) return;
         updatePose();
+        disableIfNotInLaunchZone();
+        updateTurretAim();
         computeParameters();
         updateLauncher();
+        updateTrajectoryAngle();
+
     }
-    public void enable(){
-        enable = true;
+    public void disableIfNotInLaunchZone(){
+        double robotX = robotLocation.getX();
+        double robotY = robotLocation.getY();
+        double d1,d2,d3;
+        boolean has_neg, has_pos;
+        if(robotY > 48) {
+            d1 = sign(robotX, robotY, launchZoneBig[0][0], launchZoneBig[0][1], launchZoneBig[1][0], launchZoneBig[1][1]);
+            d2 = sign(robotX, robotY, launchZoneBig[1][0], launchZoneBig[1][1], launchZoneBig[2][0], launchZoneBig[2][1]);
+            d3 = sign(robotX, robotY, launchZoneBig[2][0], launchZoneBig[2][1], launchZoneBig[0][0], launchZoneBig[0][1]);
+        }else{
+            d1 = sign(robotX, robotY, launchZoneSmall[0][0], launchZoneSmall[0][1], launchZoneSmall[1][0], launchZoneSmall[1][1]);
+            d2 = sign(robotX, robotY, launchZoneSmall[1][0], launchZoneSmall[1][1], launchZoneSmall[2][0], launchZoneSmall[2][1]);
+            d3 = sign(robotX, robotY, launchZoneSmall[2][0], launchZoneSmall[2][1], launchZoneSmall[0][0], launchZoneSmall[0][1]);
+        }
+        has_neg = d1 < 0 || d2 < 0 || d3 < 0;
+        has_pos = d1 > 0 || d2 > 0 || d3 > 0;
+        if (has_neg && has_pos){
+            disableAiming();
+        } else {
+            if(!aimingEnabled) enableAiming();
+        }
     }
-    public void disable(){
-        enable = false;
+    private double sign(double x1,double y1,double x2,double y2,double x3,double y3){
+        return (x1-x3)*(y2-y3)-(x2-x3)*(y1-y3);
+    }
+
+    public void enableLauncher(){
+        if(launcherEnabled) return;
+        launcherEnabled = true;
+        launcher.set(maxLauncherPower);
+        launcher.setVelocity(launcherStartRPM*360.0, AngleUnit.DEGREES);
+        flywheelTargetRPM = 3000;
+    }
+    public void disableLauncher(){
+        if(!launcherEnabled) return;
+        launcherEnabled = false;
+        launcher.set(0);
+        launcher.setVelocity(0,AngleUnit.DEGREES);
+        flywheelTargetRPM = 0;
+    }
+    public void enableAiming(){
+        aimingEnabled = true;
+    }
+    public void disableAiming(){
+        aimingEnabled = false;
     }
 }

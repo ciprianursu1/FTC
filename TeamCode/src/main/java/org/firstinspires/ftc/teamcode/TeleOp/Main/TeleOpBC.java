@@ -4,6 +4,7 @@ import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
@@ -14,6 +15,8 @@ public class TeleOpBC extends LinearOpMode {
     private Intake intake;
     private DriveTrain drive;
     private final Pose startPose = new Pose(64.0, 8.0, Math.toRadians(90));
+    ElapsedTime telemetryTimer = new ElapsedTime();
+
 
     // State variables
     private boolean intakeActive = false;
@@ -41,7 +44,7 @@ public class TeleOpBC extends LinearOpMode {
         spindexer.init();
         drive.init();
         turret.init(0.0, 144.0);
-        
+
         telemetry.addLine("Welcome to CIP Airlines");
         telemetry.addLine("Status: Initialized");
         telemetry.update();
@@ -65,6 +68,11 @@ public class TeleOpBC extends LinearOpMode {
             } else {
                 intake.setPower(0);
             }
+            if (gamepad1.right_bumper) {
+                drive.setPowerMultiplier(0.5);
+            } else {
+                drive.setPowerMultiplier(1.0);
+            }
 
             if (gamepad2.right_trigger > 0.75) {
                 spindexer.spindexerState = Spindexer.SpindexerState.OUTTAKE;
@@ -79,24 +87,32 @@ public class TeleOpBC extends LinearOpMode {
             if (gamepad2.a && !lastA) {
                 turretEnabled = !turretEnabled;
                 if (turretEnabled) {
-                    turret.enable();
+                    turret.enableAiming();
                 } else {
-                    turret.disable();
+                    turret.disableAiming();
                 }
+            }
+            if(spindexer.SlotChangerFull || spindexer.spindexerState == Spindexer.SpindexerState.OUTTAKE){
+                turret.enableLauncher();
+            } else {
+                turret.disableLauncher();
             }
             lastA = gamepad2.a;
             spindexer.update();
             turret.update();
 
-            Pose currentPose = pinpoint.getPose();
-            telemetry.addData("X", currentPose.getX());
-            telemetry.addData("Y", currentPose.getY());
-            telemetry.addData("Heading", Math.toDegrees(currentPose.getHeading()));
-            telemetry.addData("Spindexer State", spindexer.spindexerState);
-            telemetry.addData("Intake Active", intakeActive);
-            telemetry.addData("Turret Enabled", turretEnabled);
-            telemetry.addData("Flywheel Target RPM", turret.flywheelTargetRPM);
-            telemetry.update();
+            if (telemetryTimer.milliseconds() > 250) {
+                Pose currentPose = pinpoint.getPose();
+                telemetry.addData("X", currentPose.getX());
+                telemetry.addData("Y", currentPose.getY());
+                telemetry.addData("Heading", Math.toDegrees(currentPose.getHeading()));
+                telemetry.addData("Spindexer State", spindexer.spindexerState);
+                telemetry.addData("Intake Active", intakeActive);
+                telemetry.addData("Turret Enabled", turretEnabled);
+                telemetry.addData("Flywheel Target RPM", turret.flywheelTargetRPM);
+                telemetry.update();
+                telemetryTimer.reset();
+            }
         }
     }
 }
