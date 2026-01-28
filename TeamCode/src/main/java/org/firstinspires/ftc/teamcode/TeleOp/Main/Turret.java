@@ -90,12 +90,13 @@ public class Turret {
 
         double currentTurretDeg = turretAngler.getCurrentPosition() * turretAnglerDegPerTick + startTurretAngle;
         double targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
+        currentTurretDeg=normalizeAngle(currentTurretDeg);
         if(targetTurretDeg < 0 && targetTurretDeg > turretLimitLeft){
             targetTurretDeg = turretLimitLeft;
         } else if (targetTurretDeg >= 0 && targetTurretDeg < turretLimitRight) {
             targetTurretDeg = turretLimitRight;
         }
-        currentTurretDeg=normalizeAngle(currentTurretDeg);
+
         double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
 
         double power = error * kP;
@@ -181,9 +182,9 @@ public class Turret {
         robotLocation = Pinpoint.getPose();
     }
     public void update(){
-        if(!aimingEnabled) return;
         updatePose();
         disableIfNotInLaunchZone();
+        if(!aimingEnabled) return;
         updateTurretAim();
         computeParameters();
         updateLauncher();

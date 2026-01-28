@@ -24,9 +24,9 @@ public class Spindexer {
     private final Sample.Colors[] Motif = {Sample.Colors.PURPLE, Sample.Colors.GREEN, Sample.Colors.PURPLE};
     SpindexerState stateBeforeSlotChange = SpindexerState.INTAKE;
     Servo OuttakeTransfer;
-    SensorV2 IntakeSensor;
-    SensorV3 AuxSensor1;
-    SensorV3 AuxSensor2;
+    public SensorV2 IntakeSensor;
+    public SensorV3 AuxSensor1;
+    public SensorV3 AuxSensor2;
     final double OuttakeTransferDownPos = 0.285;
     final double OuttakeTransferUpPos = 0.000;
     private double SlotChangerPos = 0.000;
@@ -43,7 +43,7 @@ public class Spindexer {
     public boolean SlotChangerFull = false;
     private int currentOuttakeStep = 0;
     private int CurrentSlot = 0;
-    private int ballsLoaded = 0;
+    public int ballsLoaded = 0;
     private int motifIndex = 0;
     private int nextOuttakeSlot = -1;
     private boolean enabledSorting = true;
@@ -68,6 +68,8 @@ public class Spindexer {
     public void init(){
         setSlotChangerPos(IntakeSlotPositions[0]);
         OuttakeTransfer.setPosition(OuttakeTransferDownPos);
+        Arrays.fill(IntakeSlotColors, Sample.Colors.NONE);
+        Arrays.fill(OuttakeSlotColors, Sample.Colors.NONE);
     }
     public void update(){
         if(waiting){
@@ -84,14 +86,20 @@ public class Spindexer {
                 boolean intakeDetected = IntakeSensor.getDetectedColor() != Sample.Colors.NONE;
                 boolean aux1Detected = AuxSensor1.getDetectedColor() != Sample.Colors.NONE;
                 boolean aux2Detected = AuxSensor2.getDetectedColor() != Sample.Colors.NONE;
-                if (intakeDetected && !intakeDetectedPrev) intakeTimer.reset();
+                if (intakeDetected && !intakeDetectedPrev){
+                    intakeTimer.reset();
+                    IntakeSlotColors[0] = Sample.Colors.NONE;
+                }
                 if (intakeDetected && intakeTimer.milliseconds() >= DEBOUNCE_MS) {
                     IntakeSlotColors[0] = IntakeSensor.getDetectedColor();
                     intakeDetectedPrev = true;
                 } else if (!intakeDetected) {
                     intakeDetectedPrev = false;
                 }
-                if (aux1Detected && !aux1DetectedPrev) aux1Timer.reset();
+                if (aux1Detected && !aux1DetectedPrev) {
+                    aux1Timer.reset();
+                    IntakeSlotColors[1] = Sample.Colors.NONE;
+                }
                 if (aux1Detected && aux1Timer.milliseconds() >= DEBOUNCE_MS) {
                     IntakeSlotColors[1] = AuxSensor1.getDetectedColor();
                     aux1DetectedPrev = true;
@@ -99,7 +107,10 @@ public class Spindexer {
                     aux1DetectedPrev = false;
                 }
 
-                if (aux2Detected && !aux2DetectedPrev) aux2Timer.reset();
+                if (aux2Detected && !aux2DetectedPrev) {
+                    IntakeSlotColors[2] = Sample.Colors.NONE;
+                    aux2Timer.reset();
+                }
                 if (aux2Detected && aux2Timer.milliseconds() >= DEBOUNCE_MS) {
                     IntakeSlotColors[2] = AuxSensor2.getDetectedColor();
                     aux2DetectedPrev = true;

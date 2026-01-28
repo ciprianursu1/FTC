@@ -98,11 +98,23 @@ public class TeleOpBC extends LinearOpMode {
                 turret.disableLauncher();
             }
             lastA = gamepad2.a;
+            pinpoint.update();
             spindexer.update();
             turret.update();
 
             if (telemetryTimer.milliseconds() > 250) {
                 Pose currentPose = pinpoint.getPose();
+                telemetry.addData("Balls",spindexer.ballsLoaded);
+                telemetry.addData("Slot Changer Full", spindexer.SlotChangerFull);
+                telemetry.addData("Color1",spindexer.IntakeSensor.getDetectedColor());
+                telemetry.addData("Color2",spindexer.AuxSensor1.getDetectedColor());
+                telemetry.addData("Color3",spindexer.AuxSensor2.getDetectedColor());
+                telemetry.addData("Hue1",spindexer.IntakeSensor.hue);
+                telemetry.addData("Hue2",spindexer.AuxSensor1.hue);
+                telemetry.addData("Hue3",spindexer.AuxSensor2.hue);
+                telemetry.addData("Sat1", spindexer.IntakeSensor.sat);
+                telemetry.addData("Sat2", spindexer.AuxSensor1.sat);
+                telemetry.addData("Sat3", spindexer.AuxSensor2.sat);
                 telemetry.addData("X", currentPose.getX());
                 telemetry.addData("Y", currentPose.getY());
                 telemetry.addData("Heading", Math.toDegrees(currentPose.getHeading()));

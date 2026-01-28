@@ -13,12 +13,13 @@ import java.util.Arrays;
 
 public class SensorV3 {
     RevColorSensorV3 sensor;
-    ColorTuning tuneV3 = new ColorTuning(95,150,250,320,0.3,40); // tuned for V3
+    ColorTuning tuneV3 = new ColorTuning(140,160,200,250,0.3,40); // tuned for V3
     private static final int HUE_SAMPLE_SIZE = 5;
     private float[] hueSamples = new float[HUE_SAMPLE_SIZE];
     private float[] satSamples = new float[HUE_SAMPLE_SIZE];
     private int hueIndex = 0;
     private int hueCount = 0;
+    public double hue = 0,sat = 0;
 
     public enum State {
         ACTIVE, INACTIVE
@@ -48,10 +49,10 @@ public class SensorV3 {
         int max = Math.max(red, Math.max(green, blue));
         int min = Math.min(red, Math.min(green, blue));
         int chroma = max - min;
-        if (chroma < 15 || alpha < tuneV3.minAlpha) {
-            detectedColor = Sample.Colors.NONE;
-            return;
-        }
+//        if (chroma < 15 || alpha < tuneV3.minAlpha) {
+//            detectedColor = Sample.Colors.NONE;
+//            return;
+//        }
 
         // Hue + saturation averaging
         hueSamples[hueIndex] = hsv[0];
@@ -66,8 +67,8 @@ public class SensorV3 {
             satSum += satSamples[i];
         }
 
-        double hue = hueSum / hueCount;
-        double sat = satSum / hueCount;
+         hue = hueSum / hueCount;
+         sat = satSum / hueCount;
 
         if (sat < tuneV3.minSaturation) {
             detectedColor = Sample.Colors.NONE;

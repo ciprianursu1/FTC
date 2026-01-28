@@ -28,7 +28,7 @@ dependencies {
     implementation 'com.pedropathing:telemetry:1.0.0'
     // Pedro Pathing (FTC artifact)
     implementation 'com.pedropathing:ftc:2.0.5'
-    implementation 'com.acmerobotics.dashboard:dashboard:0.4.16'
+   // implementation 'com.acmerobotics.dashboard:dashboard:0.4.16'
 
     // Pedro Telemetry + Panels used by the Quickstart docs
     implementation 'com.pedropathing:telemetry:1.0.0'

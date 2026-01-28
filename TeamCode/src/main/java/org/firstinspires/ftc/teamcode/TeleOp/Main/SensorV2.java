@@ -29,7 +29,7 @@ class ColorTuning {
 }
 public class SensorV2 {
     ColorSensor sensor;
-    ColorTuning tuneV2 = new ColorTuning(90,145,260,315,0.45,20);
+    ColorTuning tuneV2 = new ColorTuning(100,145,230,260,0,20);
     private static final int HUE_SAMPLE_SIZE = 5;
     private float[] hueSamples = new float[HUE_SAMPLE_SIZE];
     private float[] satSamples = new float[HUE_SAMPLE_SIZE];
@@ -42,6 +42,7 @@ public class SensorV2 {
     public int green;
     public int blue;
     public int alpha;
+    public double hue = 0, sat = 0;
     private State sensorState = State.INACTIVE;
     private Sample.Colors detectedColor = Sample.Colors.NONE;
     public float[] hsv = new float[3];
@@ -54,24 +55,21 @@ public class SensorV2 {
         blue  = (argb & 0xFF);
         int max = Math.max(red, Math.max(green, blue));
         if (max == 0) max = 1;
-        red = ((red * 255) / max);
-        green = ((green * 255) / max);
-        blue = ((blue * 255) / max);
         Color.RGBToHSV(red,green,blue,hsv);
         int min = Math.min(red, Math.min(green, blue));
         int chroma = max - min;
-        if (max < 20) {
-            detectedColor = Sample.Colors.NONE;
-            return;
-        }
-        if (chroma < 15) {
-            detectedColor = Sample.Colors.NONE;
-            return;
-        }
-        if (alpha < tuneV2.minAlpha) {
-            detectedColor = Sample.Colors.NONE;
-            return;
-        }
+//        if (max < 20) {
+//            detectedColor = Sample.Colors.NONE;
+//            return;
+//        }
+//        if (chroma < 15) {
+//            detectedColor = Sample.Colors.NONE;
+//            return;
+//        }
+//        if (alpha < tuneV2.minAlpha) {
+//            detectedColor = Sample.Colors.NONE;
+//            return;
+//        }
 
         hueSamples[hueIndex] = hsv[0];
         satSamples[hueIndex] = hsv[1];
@@ -81,16 +79,16 @@ public class SensorV2 {
         for (int i = 0; i < hueCount; i++) {
             hueSum += hueSamples[i];
         }
-        double hue = hueSum / hueCount;
-        if (hue < 0) {
-            detectedColor = Sample.Colors.NONE;
-            return;
-        }
+        hue = hueSum / hueCount;
+//        if (hue < 0) {
+//            detectedColor = Sample.Colors.NONE;
+//            return;
+//        }
 
 
         double satSum = 0;
         for (int i = 0; i < hueCount; i++) satSum += satSamples[i];
-        double sat = satSum / hueCount;
+        sat = satSum / hueCount;
         if (sat < tuneV2.minSaturation) {
             detectedColor = Sample.Colors.NONE;
             return;
