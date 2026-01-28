@@ -141,7 +141,7 @@ public class TeleOpStefan extends LinearOpMode {
     final double turretOffsetX = 0.0;
     final double turretOffsetY = -52/1000.0;
     final double launcherStartRPM = 3000.0;
-    final double DEG_PER_TICK_FLYWHEEL = 28;
+    final double TICKS_PER_REV_FLYWHEEL = 28;
     final int maxFlywheelRPM = 6000;
     final int telemetryDelay = 200;
     private ElapsedTime telemetryTimer = new ElapsedTime();
@@ -152,7 +152,9 @@ public class TeleOpStefan extends LinearOpMode {
 
 
     private void updateLauncher(){
-        flywheel.setVelocity(flywheelTargetRPM*6.0*DEG_PER_TICK_FLYWHEEL);
+        double ticksPerSecond =
+                flywheelTargetRPM * TICKS_PER_REV_FLYWHEEL / 60.0;
+        flywheel.setVelocity(ticksPerSecond);
     }
     private void updateTrajectoryAngle(){
         setTrajectoryAngle(trajectoryAngle);
@@ -259,15 +261,15 @@ public class TeleOpStefan extends LinearOpMode {
         if(launcherEnabled) return;
         launcherEnabled = true;
         flywheel.setPower(maxLauncherPower);
-        flywheel.setVelocity(launcherStartRPM*360.0, AngleUnit.DEGREES);
         flywheelTargetRPM = 3000;
+        updateLauncher();
     }
     public void disableLauncher(){
         if(!launcherEnabled) return;
         launcherEnabled = false;
         flywheel.setPower(0);
-        flywheel.setVelocity(0,AngleUnit.DEGREES);
         flywheelTargetRPM = 0;
+        updateLauncher();
     }
     public void enableAiming(){
         aimingEnabled = true;
