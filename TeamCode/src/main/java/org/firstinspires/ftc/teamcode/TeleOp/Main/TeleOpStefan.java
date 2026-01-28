@@ -260,14 +260,12 @@ public class TeleOpStefan extends LinearOpMode {
     public void enableLauncher(){
         if(launcherEnabled) return;
         launcherEnabled = true;
-        flywheel.setPower(maxLauncherPower);
         flywheelTargetRPM = 3000;
         updateLauncher();
     }
     public void disableLauncher(){
         if(!launcherEnabled) return;
         launcherEnabled = false;
-        flywheel.setPower(0);
         flywheelTargetRPM = 0;
         updateLauncher();
     }
@@ -304,7 +302,7 @@ public class TeleOpStefan extends LinearOpMode {
         tureta.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
         tureta.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
-        PIDFCoefficients pidfCoefficients = new PIDFCoefficients(0.2, 0, 0, 0);
+        PIDFCoefficients pidfCoefficients = new PIDFCoefficients(12, 0, 0, 14);
         flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,pidfCoefficients);
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
