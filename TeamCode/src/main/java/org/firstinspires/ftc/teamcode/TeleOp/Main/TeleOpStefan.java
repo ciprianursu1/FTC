@@ -106,7 +106,7 @@ public class TeleOpStefan extends LinearOpMode {
     double turretX = 0.0;
     double turretY = 0.0;
     double power = 0;
-    double trajectoryAngle = 22.5;
+    double trajectoryAngle = 45;
     int flywheelTargetRPM = 0;
 
     /* ================= LOCALIZATION ================= */
@@ -356,6 +356,7 @@ public class TeleOpStefan extends LinearOpMode {
         spinnerFar = hardwareMap.get(Servo.class, "SpinnerFar");
         spinnerCLose = hardwareMap.get(Servo.class, "SpinnerClose");
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
+        trajectoryAngleModifier.setDirection(Servo.Direction.REVERSE);
         ejector.setPosition(ejectorDown);
         spinnerFar.setPosition(0);
         spinnerCLose.setPosition(0);
