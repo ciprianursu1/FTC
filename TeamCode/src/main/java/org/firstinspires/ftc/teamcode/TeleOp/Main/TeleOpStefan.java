@@ -22,6 +22,10 @@ import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 @TeleOp(name = "&TeleOpMainBlueClose")
 public class TeleOpStefan extends LinearOpMode {
 
+    static final long DETECT_DELAY_MS = 0;       // immediate once stable
+    static final long SERVO_MOVE_LOCK_MS = 45;   // shorter lock for faster cycling
+    long colorStartTimeMs = 0;
+    long servoMoveStartMs = 0;
     int[] last5Sensor1 = new int[5];
     int[] last5Sensor2 = new int[5];
     int[] last5Sensor3 = new int[5];
@@ -69,10 +73,10 @@ public class TeleOpStefan extends LinearOpMode {
     boolean outtakeMode = false;
     private ElapsedTime outtakeTimeout = new ElapsedTime();
     private ElapsedTime intakeTimeout = new ElapsedTime();
-    final double ejectorDown = 0.14;
-    final double ejectorUp = 0.0025;
+    final double ejectorDown = 0.19;
+    final double ejectorUp = 0.02;
     double t_intake = 0;
-    final double[] slotPositionsIntake = {0,0.19,0.38};
+    final double[] slotPositionsIntake = {0,0.19,0.38,0.085};
     PinpointLocalizer pinpoint;
     Pose pose;
     double CoordX, CoordY, header;
@@ -80,6 +84,7 @@ public class TeleOpStefan extends LinearOpMode {
     double PosspinnerMin = 0;
     double PosspinnerMax = 0.95;
     int ballsLoaded = 0;
+    final int minFlywheelRPM = 1000;
 
     static final double FLYWHEEL_TICKS_PER_REV = 28;
     static final double TARGET_RPM = 3000;
@@ -89,7 +94,7 @@ public class TeleOpStefan extends LinearOpMode {
 
     double flywheelTolerance = 20; // RPM
     private static final double MOTOR_TICKS_PER_REV = 384.5;
-    private static final double MOTOR_TO_TURRET_RATIO = 76.0 / 24.0;
+    private static final double MOTOR_TO_TURRET_RATIO = 75.0 / 24.0;
 
     private static final double DEG_PER_TICK_TURETA =
             360.0 / (MOTOR_TICKS_PER_REV * MOTOR_TO_TURRET_RATIO);
@@ -101,12 +106,12 @@ public class TeleOpStefan extends LinearOpMode {
     // Control
     private static final double kP = 0.015;
     private static final double MAX_POWER_TURETA = 0.2;
-    double targetX = 0.0;
-    double targetY = 144;
+    double targetX = 12;
+    double targetY = 136;
     double turretX = 0.0;
     double turretY = 0.0;
     double power = 0;
-    double trajectoryAngle = 45;
+    double trajectoryAngle = 73.2;
     int flywheelTargetRPM = 0;
 
     /* ================= LOCALIZATION ================= */
@@ -129,23 +134,32 @@ public class TeleOpStefan extends LinearOpMode {
     final double absoluteTargetHeight = 1.1; //meters
     final double relativeHeight = absoluteTargetHeight - absoluteTurretHeight;
     final double prefferedMaxHeightThrow = relativeHeight + 0.3; //meters (relative to turret height)
-    final double launcherEfficiency = 0.5; // needs experimenting
+    final double launcherEfficiency = 0.425; // needs experimenting
     final double flywheelRadius = 0.048;
     final double g = 9.81;
-    final double trajectoryAngleModifierGearRatio = 112.0/24.0;
+    final double trajectoryAngleModifierGearRatio = 123/15.0;
     final double trajectoryAnglerMaxTravel = 300.0;
     final double trajectoryAnglePosPerDegree = trajectoryAngleModifierGearRatio/trajectoryAnglerMaxTravel;
-    final double minTrajectoryAngle = 22.5;
-    final double maxTrajectoryAngle = 45.0;
+    final double minTrajectoryAngle = 53.2;
+    final double maxTrajectoryAngle = 73.2;
     final double startTurretAngle = -180.0;
     final double turretOffsetX = 0.0;
-    final double turretOffsetY = -52/1000.0;
+    final double turretOffsetY = 52/1000.0;
     final double launcherStartRPM = 3000.0;
     final double TICKS_PER_REV_FLYWHEEL = 28;
     final int maxFlywheelRPM = 6000;
     final int telemetryDelay = 200;
     private ElapsedTime telemetryTimer = new ElapsedTime();
     int outtakeStep = 0;
+    int[] logicalSlots = new int[3];
+    int[] lastNIntake = new int[5];
+    int idxIntake = 0;
+    boolean spinnerMoving = false;
+    boolean detectionLocked = false;
+    boolean colorPending = false;
+    boolean waitingForClear = false;
+    int lastStableIntakeColor = 0;
+
     double error = 0;
     double targetTurretDeg = 0;
     double currentTurretDeg = 0;
@@ -159,72 +173,148 @@ public class TeleOpStefan extends LinearOpMode {
     private void updateTrajectoryAngle(){
         setTrajectoryAngle(trajectoryAngle);
     }
-    private void computeParameters() {
+//    private void computeParameters() {
+//
+//        double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
+//
+//        if (d <= 1.1) {
+//            flywheelTargetRPM = 3000;
+//            trajectoryAngle = maxTrajectoryAngle;
+//            return;
+//        }
+//
+//
+//        double k = (4 * prefferedMaxHeightThrow / d)
+//                * (1 - Math.sqrt(1 - relativeHeight / prefferedMaxHeightThrow));
+//
+//        boolean constrained = (k > 3.32 || k < 1.334);
+//        if (constrained) {
+//
+//            trajectoryAngle = (k > 3.32) ? 73.2 : 53.2;
+//
+//            double tanTerm = Math.tan(Math.toRadians(trajectoryAngle));
+//
+//            double denom = (d / 2.0) * tanTerm - relativeHeight;
+//
+//            if (denom <= 0) {
+//                return;
+//            }
+//
+//            double maxHeightThrow =
+//                    (d * d * tanTerm * tanTerm)
+//                            / (16.0 * denom);
+//
+//            if (maxHeightThrow <= 0) {
+//                return;
+//            }
+//
+//            double sinTerm = Math.sin(Math.toRadians(trajectoryAngle));
+//
+//            if (Math.abs(sinTerm) < 1e-6) {
+//                return;
+//            }
+//
+//            double exitVelocity =
+//                    Math.sqrt(2 * g * maxHeightThrow) / sinTerm;
+//
+//            flywheelTargetRPM =
+//                    (int)(60 * exitVelocity
+//                            / (2 * Math.PI * flywheelRadius * launcherEfficiency));
+//
+//        } else {
+//
+//            trajectoryAngle = Math.toDegrees(Math.atan(k));
+//
+//            double sinTerm = Math.sin(Math.toRadians(trajectoryAngle));
+//
+//            if (Math.abs(sinTerm) < 1e-6) {
+//                return;
+//            }
+//
+//            double exitVelocity =
+//                    Math.sqrt(2 * g * prefferedMaxHeightThrow) / sinTerm;
+//
+//            flywheelTargetRPM =
+//                    Math.min((int)(60 * exitVelocity
+//                            / (2 * Math.PI * flywheelRadius * launcherEfficiency)),maxFlywheelRPM);
+//        }
+//    }
+private void computeParameters() {
+    double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
 
-        double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
+    if (d <= 0) {
+        flywheelTargetRPM = 3000;
+        trajectoryAngle = maxTrajectoryAngle;
+        return;
+    }
 
-        if (d <= 0) {
+    // Calculate k as per your formula
+    double k = (4.0 * prefferedMaxHeightThrow / d)
+            * (1.0 - Math.sqrt(1.0 - relativeHeight / prefferedMaxHeightThrow));
+
+    // Calculate the ideal angle based on physics
+    double idealAngle = Math.toDegrees(Math.atan(k));
+
+    // Check if angle is constrained
+    boolean constrained = (idealAngle > maxTrajectoryAngle || idealAngle < minTrajectoryAngle);
+
+    if (constrained) {
+        // Angle is outside limits, clamp it and recalculate velocity
+        trajectoryAngle = (idealAngle > maxTrajectoryAngle) ? maxTrajectoryAngle : minTrajectoryAngle;
+
+        double thetaRad = Math.toRadians(trajectoryAngle);
+        double sinTheta = Math.sin(thetaRad);
+        double cosTheta = Math.cos(thetaRad);
+        double tanTheta = Math.tan(thetaRad);
+
+        // When angle is constrained, we need to solve for exit velocity
+        // using the projectile motion equation for a fixed angle
+
+        // Solve for exit velocity using the full projectile equation:
+        // h = d*tanθ - (g*d²)/(2*v₀²*cos²θ)
+        // Rearranged: v₀ = sqrt((g*d²) / (2*cos²θ*(d*tanθ - h)))
+
+        if (Math.abs(cosTheta) < 1e-6) {
+            return; // Avoid division by zero
+        }
+
+        double denominator = d * tanTheta - relativeHeight;
+
+        if (denominator <= 0) {
+            // Target is too close or angle too shallow
+            flywheelTargetRPM = maxFlywheelRPM;
             return;
         }
 
+        double exitVelocity = Math.sqrt((g * d * d) /
+                (2 * cosTheta * cosTheta * denominator));
 
-        double k = (4 * prefferedMaxHeightThrow / d)
-                * (1 - Math.sqrt(1 - relativeHeight / prefferedMaxHeightThrow));
+        // Convert to RPM
+        flywheelTargetRPM = (int)(60 * exitVelocity /
+                (2 * Math.PI * flywheelRadius * launcherEfficiency));
 
-        boolean constrained = (k > 2.414 || k < 1.0);
+    } else {
+        // Angle is within limits, use your formula directly
+        trajectoryAngle = idealAngle;
 
-        if (constrained) {
+        double thetaRad = Math.toRadians(trajectoryAngle);
+        double sinTheta = Math.sin(thetaRad);
 
-            trajectoryAngle = (k > 2.414) ? 45.0 : 22.5;
-
-            double tanTerm = Math.tan(Math.toRadians(90.0 - trajectoryAngle));
-
-            double denom = (d / 2.0) * tanTerm - relativeHeight;
-
-            if (denom <= 0) {
-                return;
-            }
-
-            double maxHeightThrow =
-                    (d * d * tanTerm * tanTerm)
-                            / (16.0 * denom);
-
-            if (maxHeightThrow <= 0) {
-                return;
-            }
-
-            double sinTerm = Math.sin(Math.toRadians(90.0 - trajectoryAngle));
-
-            if (Math.abs(sinTerm) < 1e-6) {
-                return;
-            }
-
-            double exitVelocity =
-                    Math.sqrt(2 * g * maxHeightThrow) / sinTerm;
-
-            flywheelTargetRPM =
-                    (int)(60 * exitVelocity
-                            / (2 * Math.PI * flywheelRadius * launcherEfficiency));
-
-        } else {
-
-            trajectoryAngle = 90.0 - Math.toDegrees(Math.atan(k));
-
-            double sinTerm = Math.sin(Math.toRadians(90.0 - trajectoryAngle));
-
-            if (Math.abs(sinTerm) < 1e-6) {
-                return;
-            }
-
-            double exitVelocity =
-                    Math.sqrt(2 * g * prefferedMaxHeightThrow) / sinTerm;
-
-            flywheelTargetRPM =
-                    Math.min((int)(60 * exitVelocity
-                            / (2 * Math.PI * flywheelRadius * launcherEfficiency)),maxFlywheelRPM);
+        if (Math.abs(sinTheta) < 1e-6) {
+            return;
         }
+
+        // Your formula: v₀ = √(2gh₀)/sinθ
+        double v0 = Math.sqrt(2 * g * prefferedMaxHeightThrow) / sinTheta;
+
+        // n = 60v₀/(2πr) * 1/η
+        flywheelTargetRPM = (int)(60 * v0 / (2 * Math.PI * flywheelRadius * launcherEfficiency));
     }
 
+    // Clamp RPM values
+    flywheelTargetRPM = Math.max(minFlywheelRPM, Math.min(flywheelTargetRPM, maxFlywheelRPM));
+    // Note: trajectoryAngle will be clamped again in setTrajectoryAngle()
+}
     private void setTrajectoryAngle(double angle){
         angle = Range.clip(angle,minTrajectoryAngle,maxTrajectoryAngle);
         double position = (angle - minTrajectoryAngle)*trajectoryAnglePosPerDegree;
@@ -302,7 +392,7 @@ public class TeleOpStefan extends LinearOpMode {
         tureta.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
         tureta.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
-        PIDFCoefficients pidfCoefficients = new PIDFCoefficients(12, 0, 0, 14);
+        PIDFCoefficients pidfCoefficients = new PIDFCoefficients(24, 0, 0, 14);
         flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,pidfCoefficients);
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
@@ -354,7 +444,7 @@ public class TeleOpStefan extends LinearOpMode {
         spinnerFar = hardwareMap.get(Servo.class, "SpinnerFar");
         spinnerCLose = hardwareMap.get(Servo.class, "SpinnerClose");
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
-        trajectoryAngleModifier.setDirection(Servo.Direction.REVERSE);
+        ejector.setDirection(Servo.Direction.REVERSE);
         ejector.setPosition(ejectorDown);
         spinnerFar.setPosition(0);
         spinnerCLose.setPosition(0);
@@ -471,11 +561,6 @@ public class TeleOpStefan extends LinearOpMode {
 
 
     private void servoLogic() {
-        if (gamepad1.optionsWasReleased()) {
-            ejector.setPosition(ejectorDown);
-        } else if (gamepad1.optionsWasPressed()) {
-            ejector.setPosition(ejectorUp);
-        }
         if (gamepad1.touchpadWasPressed())
             Posspinner = 0;
         //0.19=60 de grade
@@ -492,7 +577,7 @@ public class TeleOpStefan extends LinearOpMode {
     }
 
     private boolean spinnerFull() {
-        return Color1 != 0 && Color2 != 0 && Color3 != 0;
+        return detectedBalls == 3;
     }
 
     private double getFlywheelRPM() {
@@ -511,41 +596,133 @@ public class TeleOpStefan extends LinearOpMode {
     }
 
 
-    private void colorDrivenSpinnerLogic() {
-        final int SPINNER_SLOT_CHANGE_DELAY = 300;
-        detectedBalls = 0;
-        if (Color1 != 0) detectedBalls++;
-        if (Color2 != 0) detectedBalls++;
-        if (Color3 != 0) detectedBalls++;
+//    private void colorDrivenSpinnerLogic() {
+//        final int SPINNER_SLOT_CHANGE_DELAY = 150;
+//        detectedBalls = 0;
+//        if (Color1 != 0) detectedBalls++;
+//        if (Color2 != 0) detectedBalls++;
+//        if (Color3 != 0) detectedBalls++;
+//
+//        if (Color1!=0) {
+//
+//            switch (detectedBalls) {
+//                case 1:
+//                    if(Posspinner != 0.19) {
+//                        Posspinner = 0.19;
+//                        prev_t_intake = t_intake + SPINNER_SLOT_CHANGE_DELAY;
+//                    }
+//                    break;
+//                case 2:
+//                    if(Posspinner != 0.38) {
+//                        Posspinner = 0.38;
+//                        prev_t_intake = t_intake + SPINNER_SLOT_CHANGE_DELAY;
+//                    }
+//                    break;
+//                case 3:
+//                    if(Posspinner != 0.085) {
+//                        Posspinner = 0.085;
+//                        prev_t_intake = t_intake + SPINNER_SLOT_CHANGE_DELAY;
+//                    }
+//                    intakeMode = false;
+//                    break;
+//            }
+//        }
+//    }
+private void rotateLogicalSlotsRight() {
+    int temp = logicalSlots[2];
+    logicalSlots[2] = logicalSlots[1];
+    logicalSlots[1] = logicalSlots[0];
+    logicalSlots[0] = temp;
+}
 
-        if (Color1!=0) {
+    private void rotateLogicalSlotsLeft() {
+        int temp = logicalSlots[0];
+        logicalSlots[0] = logicalSlots[1];
+        logicalSlots[1] = logicalSlots[2];
+        logicalSlots[2] = temp;
+    }
 
-            switch (detectedBalls) {
-                case 1:
-                    if(Posspinner != 0.19) {
-                        Posspinner = 0.19;
-                        prev_t_intake = t_intake + SPINNER_SLOT_CHANGE_DELAY;
-                    }
-                    break;
-                case 2:
-                    if(Posspinner != 0.38) {
-                        Posspinner = 0.38;
-                        prev_t_intake = t_intake + SPINNER_SLOT_CHANGE_DELAY;
-                    }
-                    break;
-                case 3:
-                    if(Posspinner != 0.085) {
-                        Posspinner = 0.085;
-                        prev_t_intake = t_intake + SPINNER_SLOT_CHANGE_DELAY;
-                    }
-                    intakeMode = false;
-                    break;
+    // ULTRA-FAST intake smoothing: 3 samples, need 2
+    private int processIntakeSensor(ColorSensor sensor) {
+        int detected = smekerie1(sensor);
+
+        lastNIntake[idxIntake] = detected;
+        idxIntake = (idxIntake + 1) % lastNIntake.length;
+
+        int count1 = 0, count2 = 0;
+        for (int v : lastNIntake) {
+            if (v == 1) count1++;
+            else if (v == 2) count2++;
+        }
+
+        int finalColor = 0;
+        if (count1 >= 2 && count1 > count2) finalColor = 1;
+        else if (count2 >= 2 && count2 > count1) finalColor = 2;
+
+        return finalColor;
+    }
+
+    private void colorDrivenSpinnerLogicServos() {
+
+        // Servo movement lock window (shorter for faster cycling)
+        if (spinnerMoving) {
+            if (System.currentTimeMillis() - servoMoveStartMs >= SERVO_MOVE_LOCK_MS) {
+                spinnerMoving = false;
+                detectionLocked = false;
+                lastStableIntakeColor = 0;
+            } else {
+                return;
             }
+        }
+
+        // Must clear before we allow another ball
+        if (waitingForClear) {
+            int intakeColorNow = processIntakeSensor(colorsensorSLot1);
+            if (intakeColorNow == 0) {
+                waitingForClear = false;
+                lastStableIntakeColor = 0;
+            }
+            return;
+        }
+
+        // Intake-facing sensor (change if needed)
+        int intakeColor = processIntakeSensor(colorsensorSLot1);
+
+        // FAST trigger: first nonzero after clear
+        boolean newColorDetected = (intakeColor != 0 && lastStableIntakeColor == 0);
+        if (newColorDetected) {
+            lastStableIntakeColor = intakeColor;
+        }
+
+        if (newColorDetected && !colorPending && !detectionLocked) {
+            colorStartTimeMs = System.currentTimeMillis();
+            colorPending = true;
+        }
+
+        if (colorPending && (System.currentTimeMillis() - colorStartTimeMs >= DETECT_DELAY_MS)) {
+
+            logicalSlots[0] = intakeColor;
+            rotateLogicalSlotsRight();
+
+            // Advance servo one step
+            slotIntakeIndex++;
+            slotIntakeIndex = slotIntakeIndex % 4;
+            Posspinner = slotPositionsIntake[slotIntakeIndex];
+
+            waitingForClear = true;
+            detectionLocked = true;
+            spinnerMoving = true;
+            servoMoveStartMs = System.currentTimeMillis();
+
+            colorPending = false;
         }
     }
 
+    private void resetLocalization(){
+        pinpoint.setPose(startPose);
+    }
 
-    private void updateTelemetry() {
+        private void updateTelemetry() {
         if(telemetryTimer.milliseconds() >= telemetryDelay) {
             if (outtakeMode) {
                 telemetry.addData("Slot 1", slots[0]);
@@ -581,6 +758,7 @@ public class TeleOpStefan extends LinearOpMode {
             telemetry.addData("Y", "%.1f", pY);
             telemetry.addData("Heading", "%.1f",
                     Math.toDegrees(pose.getHeading()));
+            telemetry.addData("trajectoryAngle",trajectoryAngle);
             telemetry.update();
             telemetryTimer.reset();
         }
@@ -590,14 +768,14 @@ public class TeleOpStefan extends LinearOpMode {
         t_intake = intakeTimeout.milliseconds();
         if(t_intake >= prev_t_intake) {
             updateCulori();
-            colorDrivenSpinnerLogic();
+            colorDrivenSpinnerLogicServos();
         }
         
     }
     private void runOuttake() {
         intake.setPower(1);
-        final int EJECTOR_UP_DELAY = 300;
-        final int EJECTOR_DOWN_DELAY = 300;
+        final int EJECTOR_UP_DELAY = 200;
+        final int EJECTOR_DOWN_DELAY = 150;
         final int SPINNER_SLOT_CHANGE_DELAY = 300;
         final int INITIAL_DELAY = 200;
 
@@ -641,7 +819,7 @@ public class TeleOpStefan extends LinearOpMode {
                     Posspinner = 0;
                     outtakeStep = 0;
                     outtakeMode = false;
-                    intakeMode = false;
+                    intakeMode = true;
                     ballsLoaded = 0;
                     prev_t_outtake = 0;
                     break;
@@ -665,8 +843,8 @@ public class TeleOpStefan extends LinearOpMode {
 
         while (opModeIsActive()) {
             if (Posspinner >= PosspinnerMin && Posspinner <= PosspinnerMax) {
-                spinnerFar.setPosition(Posspinner);
-                spinnerCLose.setPosition(Posspinner);
+                spinnerFar.setPosition(Posspinner -0.02);
+                spinnerCLose.setPosition(Posspinner -0.02);
             }
 
             servoLogic();
@@ -684,18 +862,19 @@ public class TeleOpStefan extends LinearOpMode {
             if(spinnerFull() && !aimingEnabled){
                 enableLauncher();
             } else {
-                if(!spinnerFull() && launcherEnabled) disableLauncher();
+                if(!spinnerFull() && launcherEnabled && !aimingEnabled) disableLauncher();
             }
             if (gamepad1.crossWasPressed()  && !gamepad1.crossWasReleased()){
                 intake.setPower(-1);
             } else if (gamepad1.crossWasReleased()) {
                 intake.setPower(spinIntake ? 1:0);
             }
+            if(gamepad1.optionsWasPressed() && gamepad1.shareWasPressed()){
+                resetLocalization();
+            }
             if (gamepad1.circleWasPressed()) {
-                if(!intakeMode){
-                    intakeTimeout.reset();
-                    prev_t_intake = 0;
-                }
+                intakeTimeout.reset();
+                prev_t_intake = 0;
                 intake.setPower(1);
                 intakeMode = true;
                 spinIntake = !spinIntake;
@@ -703,6 +882,21 @@ public class TeleOpStefan extends LinearOpMode {
                 outtakeMode = false;
                 ballsLoaded = 0;
                 Posspinner = 0;
+                slotIntakeIndex = 0;
+
+                logicalSlots[0] = 0;
+                logicalSlots[1] = 0;
+                logicalSlots[2] = 0;
+
+                waitingForClear = false;
+                detectionLocked = false;
+                spinnerMoving = false;
+                colorPending = false;
+                lastStableIntakeColor = 0;
+
+                // Reset intake filter memory (prevents stale votes)
+                for (int i = 0; i < lastNIntake.length; i++) lastNIntake[i] = 0;
+                idxIntake = 0;
             }
             
 
