@@ -392,10 +392,9 @@ private void computeParameters() {
         tureta.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
         tureta.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
-        PIDFCoefficients pidfCoefficients = new PIDFCoefficients(24, 0, 0, 14);
+        PIDFCoefficients pidfCoefficients = new PIDFCoefficients(20, 5, 8, 18);
         flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,pidfCoefficients);
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
     }
     private double normalizeAngle(double angle) {
