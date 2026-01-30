@@ -94,7 +94,7 @@ public class TeleOpStefan extends LinearOpMode {
 
     double flywheelTolerance = 20; // RPM
     private static final double MOTOR_TICKS_PER_REV = 384.5;
-    private static final double MOTOR_TO_TURRET_RATIO = 75.0 / 24.0;
+    private static final double MOTOR_TO_TURRET_RATIO = 76.0 / 24.0;
 
     private static final double DEG_PER_TICK_TURETA =
             360.0 / (MOTOR_TICKS_PER_REV * MOTOR_TO_TURRET_RATIO);
@@ -163,6 +163,13 @@ public class TeleOpStefan extends LinearOpMode {
     double error = 0;
     double targetTurretDeg = 0;
     double currentTurretDeg = 0;
+    boolean enabledSorting = false;
+    int motifIndex = 0;
+    int nextOuttakeSlot = -1;
+    int[] OuttakeSlotColors = {0,0,0};
+    int[] Motif = {1,2,1};
+    int[] IntakeSlotColors = {0,0,0};
+
 
 
     private void updateLauncher(){
@@ -173,72 +180,6 @@ public class TeleOpStefan extends LinearOpMode {
     private void updateTrajectoryAngle(){
         setTrajectoryAngle(trajectoryAngle);
     }
-//    private void computeParameters() {
-//
-//        double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
-//
-//        if (d <= 1.1) {
-//            flywheelTargetRPM = 3000;
-//            trajectoryAngle = maxTrajectoryAngle;
-//            return;
-//        }
-//
-//
-//        double k = (4 * prefferedMaxHeightThrow / d)
-//                * (1 - Math.sqrt(1 - relativeHeight / prefferedMaxHeightThrow));
-//
-//        boolean constrained = (k > 3.32 || k < 1.334);
-//        if (constrained) {
-//
-//            trajectoryAngle = (k > 3.32) ? 73.2 : 53.2;
-//
-//            double tanTerm = Math.tan(Math.toRadians(trajectoryAngle));
-//
-//            double denom = (d / 2.0) * tanTerm - relativeHeight;
-//
-//            if (denom <= 0) {
-//                return;
-//            }
-//
-//            double maxHeightThrow =
-//                    (d * d * tanTerm * tanTerm)
-//                            / (16.0 * denom);
-//
-//            if (maxHeightThrow <= 0) {
-//                return;
-//            }
-//
-//            double sinTerm = Math.sin(Math.toRadians(trajectoryAngle));
-//
-//            if (Math.abs(sinTerm) < 1e-6) {
-//                return;
-//            }
-//
-//            double exitVelocity =
-//                    Math.sqrt(2 * g * maxHeightThrow) / sinTerm;
-//
-//            flywheelTargetRPM =
-//                    (int)(60 * exitVelocity
-//                            / (2 * Math.PI * flywheelRadius * launcherEfficiency));
-//
-//        } else {
-//
-//            trajectoryAngle = Math.toDegrees(Math.atan(k));
-//
-//            double sinTerm = Math.sin(Math.toRadians(trajectoryAngle));
-//
-//            if (Math.abs(sinTerm) < 1e-6) {
-//                return;
-//            }
-//
-//            double exitVelocity =
-//                    Math.sqrt(2 * g * prefferedMaxHeightThrow) / sinTerm;
-//
-//            flywheelTargetRPM =
-//                    Math.min((int)(60 * exitVelocity
-//                            / (2 * Math.PI * flywheelRadius * launcherEfficiency)),maxFlywheelRPM);
-//        }
-//    }
 private void computeParameters() {
     double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
 
@@ -370,6 +311,34 @@ private void computeParameters() {
         startPose = new Pose(22, 127, Math.toRadians(-36));
         pinpoint.setStartPose(startPose);
     }
+    private void mapIntakeToOuttakeSlots() {
+        for (int i = 0; i < 3; i++) {
+            OuttakeSlotColors[2 - i] = IntakeSlotColors[i];
+        }
+    }
+    private void selectNextOuttakeSlot() {
+        nextOuttakeSlot = -1;
+        if(enabledSorting) {
+            for (int i = 0; i < 3; i++) {
+                if (OuttakeSlotColors[i] == Motif[motifIndex]) {
+                    nextOuttakeSlot = i;
+                    break;
+                }
+            }
+            motifIndex = (motifIndex + 1) % Motif.length;
+        }
+
+        // If no match, just take the next available ball
+        if (nextOuttakeSlot == -1) {
+            for (int i = 0; i < 3; i++) {
+                if (OuttakeSlotColors[i] != 0) {
+                    nextOuttakeSlot = i;
+                    break;
+                }
+            }
+        }
+    }
+
 
     private void InitWheels() {
         front_left = hardwareMap.dcMotor.get("lf");
@@ -392,7 +361,7 @@ private void computeParameters() {
         tureta.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
         tureta.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
-        PIDFCoefficients pidfCoefficients = new PIDFCoefficients(20, 5, 8, 18);
+        PIDFCoefficients pidfCoefficients = new PIDFCoefficients(20, 5, 12, 18);
         flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,pidfCoefficients);
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
@@ -773,8 +742,8 @@ private void rotateLogicalSlotsRight() {
     }
     private void runOuttake() {
         intake.setPower(1);
-        final int EJECTOR_UP_DELAY = 200;
-        final int EJECTOR_DOWN_DELAY = 150;
+        final int EJECTOR_UP_DELAY = 250;
+        final int EJECTOR_DOWN_DELAY = 200;
         final int SPINNER_SLOT_CHANGE_DELAY = 300;
         final int INITIAL_DELAY = 200;
 
@@ -791,7 +760,7 @@ private void rotateLogicalSlotsRight() {
         if(t >= prev_t_outtake){
             switch (outtakeStep++) {
                 case 0:
-                    Posspinner = 0.085;
+                    Posspinner = 0.09;
                     prev_t_outtake = t + INITIAL_DELAY;
                     break;
                 case 1:
@@ -807,11 +776,11 @@ private void rotateLogicalSlotsRight() {
                     prev_t_outtake = t + EJECTOR_DOWN_DELAY;
                     break;
                 case 3:
-                    Posspinner = 0.28;
+                    Posspinner = 0.29;
                     prev_t_outtake = t + SPINNER_SLOT_CHANGE_DELAY;
                     break;
                 case 6:
-                    Posspinner = 0.46;
+                    Posspinner = 0.47;
                     prev_t_outtake = t + SPINNER_SLOT_CHANGE_DELAY;
                     break;
                 case 9:
@@ -842,8 +811,8 @@ private void rotateLogicalSlotsRight() {
 
         while (opModeIsActive()) {
             if (Posspinner >= PosspinnerMin && Posspinner <= PosspinnerMax) {
-                spinnerFar.setPosition(Posspinner -0.02);
-                spinnerCLose.setPosition(Posspinner -0.02);
+                spinnerFar.setPosition(Posspinner);
+                spinnerCLose.setPosition(Posspinner);
             }
 
             servoLogic();
