@@ -682,6 +682,7 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
             telemetry.addData("Heading", "%.1f",
                     Math.toDegrees(pose.getHeading()));
             telemetry.addData("trajectoryAngle",trajectoryAngle);
+            telemetry.addData("loopTime", loopTime.milliseconds());
             telemetry.update();
             telemetryTimer.reset();
         }
@@ -807,6 +808,7 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
                     Arrays.fill(rpmBuf,getFlywheelRPM());
                     outtakeTimeout.reset();
                     outtakeStep = 0;
+                    lastOuttakeSlot = -1;
                     gamepad1.rumble(150);
                 }
                 spinnerState = SpinnerState.OUTTAKE;
