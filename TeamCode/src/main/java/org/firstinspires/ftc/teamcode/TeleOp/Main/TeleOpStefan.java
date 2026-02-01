@@ -69,15 +69,15 @@ public class TeleOpStefan extends LinearOpMode {
     private final ElapsedTime outtakeTimeout = new ElapsedTime();
     final double ejectorDown = 0.19;
     final double ejectorUp = 0.02;
-    final double[] slotPositionsIntake = {0,0.19,0.38,0.085};
-    final double[] slotPositionsOuttake = {0.09, 0.28, 0.47};
+    final double[] slotPositionsIntake = {0,0.19,0.38,0.095};
+    final double[] slotPositionsOuttake = {0.095, 0.285, 0.475};
     PinpointLocalizer pinpoint;
     Pose pose;
     Pose velocity;
     double PosSpinner = 0;
     double PosSpinnerMin = 0;
     double PosSpinnerMax = 0.95;
-    double t_flight = 0.0;
+    double v0 = 0.0;
     final int minFlywheelRPM = 1000;
 
     static final double FLYWHEEL_TICKS_PER_REV = 28;
@@ -112,18 +112,19 @@ public class TeleOpStefan extends LinearOpMode {
     private boolean launcherEnabled = false;
     final double[][] launchZoneBig = {{-18,144},{162,144},{72,55}};
     final double[][] launchZoneSmall = {{40,0},{102,0},{72,32}};
-    final double absoluteTurretHeight = 0.35; //meters
-    final double absoluteTargetHeight = 1.1; //meters
+    final double absoluteTurretHeight = 0.25; //meters
+    final double absoluteTargetHeight = 1.0; //meters
     final double relativeHeight = absoluteTargetHeight - absoluteTurretHeight;
-    final double preferredMaxHeightThrow = relativeHeight + 0.5; //meters (relative to turret height)
-    final double launcherEfficiency = 0.425; // needs experimenting
+    final double absoluteObstacleHeight = 1.1; //meters
+    final double relativeObstacleTargetDistance = 0.465; //meters
+    final double launcherEfficiency = 0.425; // needs experimenting (0.46 calculated)
     final double flywheelRadius = 0.048;
     final double g = 9.81;
     final double trajectoryAngleModifierGearRatio = 127/15.0;
     final double trajectoryAnglerMaxTravel = 300.0;
     final double trajectoryAnglePosPerDegree = trajectoryAngleModifierGearRatio/trajectoryAnglerMaxTravel;
-    final double minTrajectoryAngle = 53.2;
-    final double maxTrajectoryAngle = 73.2;
+    final double minTrajectoryAngle = 50.2;
+    final double maxTrajectoryAngle = 70.0;
     final double startTurretAngle = -180.0;
     final double turretOffsetX = 0.0;
     final double turretOffsetY =  -52/1000.0;
@@ -141,7 +142,7 @@ public class TeleOpStefan extends LinearOpMode {
     boolean colorPending = false;
     boolean waitingForClear = false;
     int lastStableIntakeColor = 0;
-
+    int turretPos = 0;
     double error = 0;
     double targetTurretDeg = 0;
     double currentTurretDeg = 0;
@@ -169,81 +170,112 @@ public class TeleOpStefan extends LinearOpMode {
     private void updateTrajectoryAngle(){
         setTrajectoryAngle(trajectoryAngle);
     }
-private void computeParameters() {
-    double robotVelX = velocity.getX() / 1000.0;
-    double robotVelY = velocity.getY() / 1000.0;
-    double dx = targetX - turretX;
-    double dy = targetY - turretY;
-    double d = Math.hypot(dx, dy) * 0.0254; // convert to meters
+    private void updateShooter() {
+        // --- 1. Robot pose and velocity in field frame ---
+        double robotX = pose.getX();
+        double robotY = pose.getY();
+        double robotHeadingRad = pose.getHeading(); // radians
+        double robotHeadingDeg = Math.toDegrees(robotHeadingRad);
 
-    if (d <= 0) {
-        flywheelTargetRPM = minFlywheelRPM;
-        trajectoryAngle = maxTrajectoryAngle;
-        return;
-    }
+        double vRobotX = velocity.getX() / 1000.0; // robot frame m/s
+        double vRobotY = velocity.getY() / 1000.0;
 
-    double k = (4.0 * preferredMaxHeightThrow / d)
-            * (1.0 - Math.sqrt(1.0 - relativeHeight / preferredMaxHeightThrow));
-    double idealAngle = Math.toDegrees(Math.atan(k));
+        // Rotate robot velocity into field frame
+        double fieldVelX = vRobotX * Math.cos(robotHeadingRad) - vRobotY * Math.sin(robotHeadingRad);
+        double fieldVelY = vRobotX * Math.sin(robotHeadingRad) + vRobotY * Math.cos(robotHeadingRad);
 
-    boolean constrained = (idealAngle > maxTrajectoryAngle || idealAngle < minTrajectoryAngle);
-    trajectoryAngle = constrained
-            ? (idealAngle > maxTrajectoryAngle ? maxTrajectoryAngle : minTrajectoryAngle)
-            : idealAngle;
+        // --- 2. Turret world position ---
+        turretX = robotX + turretOffsetX * Math.cos(robotHeadingRad) - turretOffsetY * Math.sin(robotHeadingRad);
+        turretY = robotY + turretOffsetX * Math.sin(robotHeadingRad) + turretOffsetY * Math.cos(robotHeadingRad);
 
-    double thetaRad = Math.toRadians(trajectoryAngle);
-    double v0;
-    if (constrained) {
+        // --- 3. Vector to target ---
+        double dx = targetX - turretX;
+        double dy = targetY - turretY;
+        double distance = Math.hypot(dx, dy);
+
+        if (distance < 1e-3) return; // target too close
+
+        // --- 4. Compute trajectory angle with obstacle avoidance ---
+        double d = distance * 0.0254; // meters
+        double d1 = d - relativeObstacleTargetDistance;
+
+        double k = (d*d*(absoluteObstacleHeight - absoluteTurretHeight) - d1*d1*relativeHeight)
+                / (d*d1*relativeObstacleTargetDistance);
+        double idealAngle = Math.toDegrees(Math.atan(k));
+        boolean constrained = (idealAngle > maxTrajectoryAngle || idealAngle < minTrajectoryAngle);
+        trajectoryAngle = constrained
+                ? (idealAngle > maxTrajectoryAngle ? maxTrajectoryAngle : minTrajectoryAngle)
+                : idealAngle;
+
+        double thetaRad = Math.toRadians(trajectoryAngle);
         double cosTheta = Math.cos(thetaRad);
         double tanTheta = Math.tan(thetaRad);
-        double denominator = d * tanTheta - relativeHeight;
+
+        double denominator;
+        if (!constrained) {
+            denominator = (d1*tanTheta - (absoluteObstacleHeight - absoluteTurretHeight)) / (d1*d1);
+        } else {
+            double h1 = absoluteTurretHeight + d1*tanTheta - (d1*d1)/(d*d)*(d*tanTheta - relativeHeight);
+            denominator = (d1*tanTheta - (h1 - absoluteTurretHeight)) / (d1*d1);
+        }
 
         if (Math.abs(cosTheta) < 1e-6 || denominator <= 0) {
             flywheelTargetRPM = minFlywheelRPM;
             return;
         }
 
-        v0 = Math.sqrt((g * d * d) / (2 * cosTheta * cosTheta * denominator));
-    } else {
-        double sinTheta = Math.sin(thetaRad);
-        if (Math.abs(sinTheta) < 1e-6) {
+        // --- 5. Compute required world-frame launch speed ---
+        double vWorld = Math.sqrt(g / (2 * cosTheta * cosTheta * denominator));
+
+        // --- 6. Compute shot direction unit vector ---
+        double shotDirX = dx / distance;
+        double shotDirY = dy / distance;
+
+        // --- 7. Estimate time-of-flight for lead ---
+        double vHorizontal = vWorld * cosTheta;
+        double tFlight = distance / Math.max(vHorizontal, 0.1); // seconds, prevent div0
+
+        // --- 8. Project robot velocity along and lateral to shot ---
+        double robotVelAlongShot = fieldVelX * shotDirX + fieldVelY * shotDirY;
+        double robotVelLateral = fieldVelX * (-shotDirY) + fieldVelY * shotDirX;
+
+        // --- 9. Apply lead to target vector ---
+        dx -= robotVelAlongShot * tFlight;
+        dy -= robotVelLateral * tFlight;
+
+        // --- 10. Compute final turret field angle ---
+        double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
+        targetTurretDeg = aimingEnabled ? normalizeAngle(fieldAngle - robotHeadingDeg) : startTurretAngle;
+        targetTurretDeg = Range.clip(targetTurretDeg, LEFT_LIMIT, RIGHT_LIMIT);
+
+        // --- 11. Send turret target ---
+        int targetTicks = (int) (targetTurretDeg * DEG_PER_TICK_TURRET);
+        turret.setTargetPosition(targetTicks);
+        turret.setPower(MAX_TURRET_POWER);
+
+        // --- 12. Update current turret angle from encoder ---
+        turretPos = turret.getCurrentPosition();
+        currentTurretDeg = turretPos * DEG_PER_TICK_TURRET + startTurretAngle;
+
+        // --- 13. Compensate flywheel speed for robot motion along shot ---
+        double turretYawFieldRad = robotHeadingRad + Math.toRadians(targetTurretDeg);
+        double shotDirCompX = Math.cos(turretYawFieldRad);
+        double shotDirCompY = Math.sin(turretYawFieldRad);
+        double robotVelAlongShotComp = fieldVelX * shotDirCompX + fieldVelY * shotDirCompY;
+
+        v0 = vWorld - robotVelAlongShotComp;
+        if (v0 <= 0) {
             flywheelTargetRPM = minFlywheelRPM;
-            return;
+        } else {
+            flywheelTargetRPM = (int) (60 * v0 / (2 * Math.PI * flywheelRadius * launcherEfficiency));
+            flywheelTargetRPM = Math.max(minFlywheelRPM, Math.min(flywheelTargetRPM, maxFlywheelRPM));
         }
-        v0 = Math.sqrt(2 * g * preferredMaxHeightThrow) / sinTheta;
+
+        // --- 14. Update trajectory angle servo ---
+        setTrajectoryAngle(trajectoryAngle);
+        // --- 15. Update flywheel ---
+        updateLauncher();
     }
-
-    t_flight = d / (v0 * Math.cos(thetaRad));
-
-    dx -= robotVelX * t_flight;
-    dy -= robotVelY * t_flight;
-
-    double d_lead = Math.hypot(dx, dy);
-
-    if (constrained) {
-        double cosTheta = Math.cos(thetaRad);
-        double tanTheta = Math.tan(thetaRad);
-        double denominator = d_lead * tanTheta - relativeHeight;
-
-        if (Math.abs(cosTheta) < 1e-6 || denominator <= 0) {
-            flywheelTargetRPM = minFlywheelRPM;
-            return;
-        }
-
-        v0 = Math.sqrt((g * d_lead * d_lead) / (2 * cosTheta * cosTheta * denominator));
-    } else {
-        double sinTheta = Math.sin(thetaRad);
-        if (Math.abs(sinTheta) < 1e-6) {
-            flywheelTargetRPM = minFlywheelRPM;
-            return;
-        }
-        v0 = Math.sqrt(2 * g * preferredMaxHeightThrow) / sinTheta;
-    }
-
-    flywheelTargetRPM = (int) (60 * v0 / (2 * Math.PI * flywheelRadius * launcherEfficiency));
-
-    flywheelTargetRPM = Math.max(minFlywheelRPM, Math.min(flywheelTargetRPM, maxFlywheelRPM));
-}
 
     private void setTrajectoryAngle(double angle){
         angle = Range.clip(angle,minTrajectoryAngle,maxTrajectoryAngle);
@@ -364,42 +396,6 @@ private void computeParameters() {
         while (angle < -180) angle += 360;
         return angle;
     }
-    private void updateTurretAim() {
-        double robotX = pose.getX();
-        double robotY = pose.getY();
-        double robotVelX = velocity.getX()/1000.0;
-        double robotVelY = velocity.getY()/1000.0;
-        double robotHeadingDeg = Math.toDegrees(pose.getHeading());
-
-        turretX = robotX + turretOffsetX * Math.cos(pose.getHeading())
-                - turretOffsetY * Math.sin(pose.getHeading());
-        turretY = robotY + turretOffsetX * Math.sin(pose.getHeading())
-                + turretOffsetY * Math.cos(pose.getHeading());
-
-        double dx = targetX - turretX;
-        double dy = targetY - turretY;
-
-        dx -= robotVelX * t_flight;
-        dy -= robotVelY * t_flight;
-
-        double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
-
-
-        if (aimingEnabled) {
-            targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
-        } else {
-            targetTurretDeg = startTurretAngle;
-        }
-
-        targetTurretDeg = Range.clip(targetTurretDeg, LEFT_LIMIT, RIGHT_LIMIT);
-
-        int targetTicks = (int) (targetTurretDeg * DEG_PER_TICK_TURRET);
-        turret.setTargetPosition(targetTicks);
-        turret.setPower(MAX_TURRET_POWER);
-
-        currentTurretDeg = turret.getCurrentPosition() * DEG_PER_TICK_TURRET + startTurretAngle;
-    }
-
 
     private void InitServo() {
         ejector = hardwareMap.get(Servo.class, "ejector");
@@ -546,13 +542,13 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
         }
         if (gamepad1.dpadLeftWasPressed()){
             slotIntakeIndex--;
-            slotIntakeIndex = slotIntakeIndex % 3;
+            slotIntakeIndex = (slotIntakeIndex + 3) % 3;
             PosSpinner = slotPositionsIntake[slotIntakeIndex];
         }
     }
 
     private boolean spinnerFull() {
-        return Color1 != 0 && Color2 != 0 && Color3 != 0;
+        return (Color1 != 0 && Color2 != 0 && Color3 != 0) || slotIntakeIndex == 3;
     }
     private boolean flywheelReady() {
         rpmBuf[rpmIdx] = getFlywheelRPM();
@@ -635,6 +631,7 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
 
             Color1 = intakeColor;
             slotIntakeIndex++;
+            if(slotIntakeIndex == 3) return;
             slotIntakeIndex = slotIntakeIndex % 3;
             PosSpinner = slotPositionsIntake[slotIntakeIndex];
 
@@ -674,7 +671,6 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
             telemetry.addData("Sensor 2", getHue(colorSensorSlot2.red(), colorSensorSlot2.green(), colorSensorSlot2.blue()));
             telemetry.addData("Sensor 3", getHue(colorSensorSlot3.red(), colorSensorSlot3.green(), colorSensorSlot3.blue()));
             telemetry.addData("Target (raw)", "%.1f", targetTurretDeg);
-            telemetry.addData("Turret", "%.1f", currentTurretDeg);
             telemetry.addData("Error", "%.1f", error);
             telemetry.addData("Power", "%.2f", power);
             telemetry.addData("Flywheel Target RPM", flywheelTargetRPM);
@@ -683,6 +679,8 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
                     Math.toDegrees(pose.getHeading()));
             telemetry.addData("trajectoryAngle",trajectoryAngle);
             telemetry.addData("loopTime", loopTime.milliseconds());
+            telemetry.addData("turretTicks",turretPos);
+            telemetry.addData("Turret", "%.1f", currentTurretDeg);
             telemetry.update();
             telemetryTimer.reset();
         }
@@ -711,9 +709,9 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
                         spinnerState = SpinnerState.INTAKE;
                         spinIntake = true;
                         slotIntakeIndex = 0;
-                        waitingForClear = false;
+                        waitingForClear = true;
                         detectionLocked = false;
-                        spinnerMoving = false;
+                        spinnerMoving = true;
                         colorPending = false;
                         lastStableIntakeColor = 0;
                         Arrays.fill(lastNIntake, 0);
@@ -741,9 +739,10 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
         spinnerState = SpinnerState.INTAKE;
         spinIntake = true;
         slotIntakeIndex = 0;
-        waitingForClear = false;
+        PosSpinner = slotPositionsIntake[0];
+        waitingForClear = true;
         detectionLocked = false;
-        spinnerMoving = false;
+        spinnerMoving = true;
         colorPending = false;
         lastStableIntakeColor = 0;
         Arrays.fill(lastNIntake, 0);
@@ -775,11 +774,9 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
             pose = pinpoint.getPose();
             velocity = pinpoint.getVelocity();
             disableIfNotInLaunchZone();
-            updateTurretAim();
             updateTelemetry();
             if(aimingEnabled){
-                computeParameters();
-                updateLauncher();
+                updateShooter();
                 updateTrajectoryAngle();
             }
             if(spinnerFull() && !aimingEnabled){
