@@ -69,6 +69,7 @@ public class TeleOpStefan extends LinearOpMode {
     private final ElapsedTime outtakeTimeout = new ElapsedTime();
     final double ejectorDown = 0.19;
     final double ejectorUp = 0.02;
+    final double kP = 0.015;
     final double[] slotPositionsIntake = {0,0.19,0.38,0.095};
     final double[] slotPositionsOuttake = {0.095, 0.285, 0.475};
     PinpointLocalizer pinpoint;
@@ -128,13 +129,12 @@ public class TeleOpStefan extends LinearOpMode {
     final double startTurretAngle = -180.0;
     final double turretOffsetX = 0.0;
     final double turretOffsetY =  -52/1000.0;
-    final int launcherStartRPM = 2500;
+    final int launcherStartRPM = 2000;
     final double TICKS_PER_REV_FLYWHEEL = 28;
     final int maxFlywheelRPM = 6000;
     final int telemetryDelay = 200;
     private final ElapsedTime telemetryTimer = new ElapsedTime();
     private final ElapsedTime loopTime = new ElapsedTime();
-    int outtakeStep = 0;
     int[] lastNIntake = new int[5];
     int idxIntake = 0;
     boolean spinnerMoving = false;
@@ -142,7 +142,6 @@ public class TeleOpStefan extends LinearOpMode {
     boolean colorPending = false;
     boolean waitingForClear = false;
     int lastStableIntakeColor = 0;
-    int turretPos = 0;
     double error = 0;
     double targetTurretDeg = 0;
     double currentTurretDeg = 0;
@@ -245,17 +244,30 @@ public class TeleOpStefan extends LinearOpMode {
 
         // --- 10. Compute final turret field angle ---
         double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
-        targetTurretDeg = aimingEnabled ? normalizeAngle(fieldAngle - robotHeadingDeg) : startTurretAngle;
-        targetTurretDeg = Range.clip(targetTurretDeg, LEFT_LIMIT, RIGHT_LIMIT);
 
-        // --- 11. Send turret target ---
-        int targetTicks = (int) (targetTurretDeg * DEG_PER_TICK_TURRET);
-        turret.setTargetPosition(targetTicks);
-        turret.setPower(MAX_TURRET_POWER);
+        currentTurretDeg =
+                turret.getCurrentPosition() * DEG_PER_TICK_TURRET + startTurretAngle;
+        currentTurretDeg = normalizeAngle(currentTurretDeg);
 
-        // --- 12. Update current turret angle from encoder ---
-        turretPos = turret.getCurrentPosition();
-        currentTurretDeg = turretPos * DEG_PER_TICK_TURRET + startTurretAngle;
+        if (aimingEnabled) {
+            targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
+        } else {
+            targetTurretDeg = startTurretAngle;
+        }
+
+// --- Soft limits EXACTLY like working code ---
+        if (targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT) {
+            targetTurretDeg = LEFT_LIMIT;
+        } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
+            targetTurretDeg = RIGHT_LIMIT;
+        }
+
+// --- Closed-loop turret control ---
+        error = normalizeAngle(targetTurretDeg - currentTurretDeg);
+        power = error * kP;
+        power = Range.clip(power, -MAX_TURRET_POWER, MAX_TURRET_POWER);
+        turret.setPower(power);
+
 
         // --- 13. Compensate flywheel speed for robot motion along shot ---
         double turretYawFieldRad = robotHeadingRad + Math.toRadians(targetTurretDeg);
@@ -343,6 +355,7 @@ public class TeleOpStefan extends LinearOpMode {
             for (int i = 0; i < 3; i++) {
                 if (OuttakeSlotColors[i] == Motif[motifIndex]) {
                     nextOuttakeSlot = i;
+                    OuttakeSlotColors[i] = 0;
                     break;
                 }
             }
@@ -354,6 +367,7 @@ public class TeleOpStefan extends LinearOpMode {
             for (int i = 0; i < 3; i++) {
                 if (OuttakeSlotColors[i] != 0) {
                     nextOuttakeSlot = i;
+                    OuttakeSlotColors[i] = 0;
                     break;
                 }
             }
@@ -379,12 +393,10 @@ public class TeleOpStefan extends LinearOpMode {
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
         turret = hardwareMap.get(DcMotorEx.class, "tureta");
-        PIDFCoefficients pidfCoefficientsTurret = new PIDFCoefficients(5,2,2,4);
         turret.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
         turret.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         turret.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
-        turret.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,pidfCoefficientsTurret);
-        PIDFCoefficients pidfCoefficientsFlywheel = new PIDFCoefficients(20, 5, 12, 12);
+        PIDFCoefficients pidfCoefficientsFlywheel = new PIDFCoefficients(15.1, 0, 0, 12.45);
         flywheel.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,pidfCoefficientsFlywheel);
@@ -404,6 +416,7 @@ public class TeleOpStefan extends LinearOpMode {
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
         ejector.setDirection(Servo.Direction.REVERSE);
         ejector.setPosition(ejectorDown);
+        trajectoryAngleModifier.setPosition(0);
         spinnerFar.setPosition(0);
         spinnerClose.setPosition(0);
     }
@@ -631,7 +644,13 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
 
             Color1 = intakeColor;
             slotIntakeIndex++;
-            if(slotIntakeIndex == 3) return;
+            if(slotIntakeIndex == 3) {
+                waitingForClear = true;
+                detectionLocked = true;
+                spinnerMoving = false;   // no movement, but block logic
+                colorPending = false;
+                return;
+            }
             slotIntakeIndex = slotIntakeIndex % 3;
             PosSpinner = slotPositionsIntake[slotIntakeIndex];
 
@@ -663,7 +682,9 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
 
             telemetry.addData("time_outtake", outtakeTimeout.time());
             telemetry.addData("PosSpinner", PosSpinner);
-
+            telemetry.addData("X", pose.getX());
+            telemetry.addData("Y", pose.getY());
+            telemetry.addData("Heading", "%.1f", Math.toDegrees(pose.getHeading()));
             telemetry.addData("Sensor 1a", colorSensorSlot1.alpha());
             telemetry.addData("Sensor 2a", colorSensorSlot2.alpha());
             telemetry.addData("Sensor 3a", colorSensorSlot3.alpha());
@@ -679,7 +700,6 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
                     Math.toDegrees(pose.getHeading()));
             telemetry.addData("trajectoryAngle",trajectoryAngle);
             telemetry.addData("loopTime", loopTime.milliseconds());
-            telemetry.addData("turretTicks",turretPos);
             telemetry.addData("Turret", "%.1f", currentTurretDeg);
             telemetry.update();
             telemetryTimer.reset();
@@ -691,6 +711,13 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
             colorDrivenSpinnerLogicServos();
         
     }
+    enum OuttakeState {
+        SELECT_SLOT,
+        EJECT_UP,
+        EJECT_DOWN
+    }
+    OuttakeState outtakeState = OuttakeState.SELECT_SLOT;
+
     private void runOuttake() {
         spinIntake = true;
         final int EJECTOR_UP_DELAY = 250;
@@ -699,12 +726,12 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
         mapIntakeToOuttakeSlots();
         double t = outtakeTimeout.milliseconds();
         if(t >= prev_t_outtake){
-            switch (outtakeStep%3) {
-                case 0:
+            switch (outtakeState) {
+                case SELECT_SLOT:
                     selectNextOuttakeSlot();
                     if(nextOuttakeSlot == -1) {
-                        outtakeStep = 0;
-                        prev_t_outtake = 0;
+                        outtakeState = OuttakeState.SELECT_SLOT;
+                        prev_t_outtake = t;
                         PosSpinner = slotPositionsIntake[0];
                         spinnerState = SpinnerState.INTAKE;
                         spinIntake = true;
@@ -721,18 +748,20 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
                     PosSpinner = slotPositionsOuttake[nextOuttakeSlot];
                     prev_t_outtake = t + SPINNER_SLOT_CHANGE_DELAY * Math.abs(lastOuttakeSlot - nextOuttakeSlot);
                     lastOuttakeSlot = nextOuttakeSlot;
+                    outtakeState = OuttakeState.EJECT_UP;
                     break;
-                case 1:
+                case EJECT_UP:
                     if(!flywheelReady()) return;
                     ejector.setPosition(ejectorUp);
                     prev_t_outtake = t + EJECTOR_UP_DELAY;
+                    outtakeState = OuttakeState.EJECT_DOWN;
                     break;
-                case 2:
+                case EJECT_DOWN:
                     ejector.setPosition(ejectorDown);
                     prev_t_outtake = t + EJECTOR_DOWN_DELAY;
+                    outtakeState = OuttakeState.SELECT_SLOT;
                     break;
             }
-            outtakeStep++;
         }
     }
     private void startIntakeMode(){
@@ -804,7 +833,7 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
                 if(spinnerState == SpinnerState.INTAKE) {
                     Arrays.fill(rpmBuf,getFlywheelRPM());
                     outtakeTimeout.reset();
-                    outtakeStep = 0;
+                    outtakeState = OuttakeState.SELECT_SLOT;
                     lastOuttakeSlot = -1;
                     gamepad1.rumble(150);
                 }
