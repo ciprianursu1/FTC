@@ -16,14 +16,13 @@ import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
-
-import java.util.Arrays;
 
 @TeleOp(name = "&TeleOpMainBlueClose")
 public class TeleOpStefan extends LinearOpMode {
 
-    static final long DETECT_DELAY_MS = 50;       // immediate once stable
+    static final long DETECT_DELAY_MS = 0;       // immediate once stable
     static final long SERVO_MOVE_LOCK_MS = 45;   // shorter lock for faster cycling
     long colorStartTimeMs = 0;
     long servoMoveStartMs = 0;
@@ -36,17 +35,23 @@ public class TeleOpStefan extends LinearOpMode {
     int indexSensor3 = 0;
 
 
+    int[] slots = new int[3];
+    int[] totem = {2, 1, 2};
+
+    // Color tracking
     int Color1 = 0;
     int Color2 = 0;
     int Color3 = 0;
+    int detectedBalls = 0;
     int slotIntakeIndex = 0;
     double prev_t_outtake = 0;
+    double prev_t_intake = 0;
 
-    ColorSensor colorSensorSlot1;
-    ColorSensor colorSensorSlot2;
-    ColorSensor colorSensorSlot3;
+    ColorSensor colorsensorSLot1;
+    ColorSensor colorsensorSLot2;
+    ColorSensor colorsensorSLot3;
     DcMotor intake;
-    DcMotorEx turret;
+    DcMotorEx tureta;
     Servo ejector;
     Servo trajectoryAngleModifier;
     DcMotor front_left;
@@ -54,38 +59,44 @@ public class TeleOpStefan extends LinearOpMode {
     DcMotor back_left;
     DcMotor back_right;
     DcMotorEx flywheel;
-    Servo spinnerClose;
+    Servo spinnerCLose;
     Servo spinnerFar;
 
-    
+
     boolean spinIntake = false;
 
     Limelight3A limelight;
     IMU imu;
-    private enum SpinnerState {
-        INTAKE,OUTTAKE
-    }
-    SpinnerState spinnerState = SpinnerState.INTAKE;
-    private final ElapsedTime outtakeTimeout = new ElapsedTime();
-    final double ejectorDown = 0.19;
+    boolean flywheelOn = false;
+    boolean intakeMode = false;
+    boolean intakeReverse = false;
+    boolean outtakeMode = false;
+    private ElapsedTime outtakeTimeout = new ElapsedTime();
+    private ElapsedTime intakeTimeout = new ElapsedTime();
+    final double ejectorDown = 0.2;
     final double ejectorUp = 0.02;
-    final double kP = 0.015;
-    final double[] slotPositionsIntake = {0,0.19,0.38,0.095};
-    final double[] slotPositionsOuttake = {0.095, 0.285, 0.475};
+    double t_intake = 0;
+    final double[] slotPositionsIntake = {0,0.19,0.38,0.085};
     PinpointLocalizer pinpoint;
     Pose pose;
-    Pose velocity;
-    double PosSpinner = 0;
-    double PosSpinnerMin = 0;
-    double PosSpinnerMax = 0.95;
-    double v0 = 0.0;
+    double CoordX, CoordY, header;
+    double Posspinner = 0;
+    double PosspinnerMin = 0;
+    double PosspinnerMax = 0.95;
+    int ballsLoaded = 0;
     final int minFlywheelRPM = 1000;
 
     static final double FLYWHEEL_TICKS_PER_REV = 28;
-    private static final double MOTOR_TICKS_PER_REV = 384.5;
-    private static final double MOTOR_TO_TURRET_RATIO = 75 / 26.0;
+    static final double TARGET_RPM = 3000;
 
-    private static final double DEG_PER_TICK_TURRET =
+    double flywheelPowerHigh = 0.65;
+    double flywheelPowerLow = 0.55;
+
+    double flywheelTolerance = 20; // RPM
+    private static final double MOTOR_TICKS_PER_REV = 384.5;
+    private static final double MOTOR_TO_TURRET_RATIO = 75.0 / 26.0;
+
+    private static final double DEG_PER_TICK_TURETA =
             360.0 / (MOTOR_TICKS_PER_REV * MOTOR_TO_TURRET_RATIO);
 
     // Turret soft limits (degrees)
@@ -93,48 +104,88 @@ public class TeleOpStefan extends LinearOpMode {
     private static final double RIGHT_LIMIT = 110;
 
     // Control
-    private static final double MAX_TURRET_POWER = 0.2;
-    double targetX = 12;
-    double targetY = 136;
+    private static final double kP = 0.015;
+    private static final double MAX_POWER_TURETA = 0.2;
+    double targetX = 10;
+    double targetY = 137.5;
     double turretX = 0.0;
     double turretY = 0.0;
     double power = 0;
-    double trajectoryAngle = 73.2;
+    double trajectoryAngle = 70;
     int flywheelTargetRPM = 0;
 
     /* ================= LOCALIZATION ================= */
 
     private Pose startPose;
 
+    private double pX, pY;
+    private long stepStartMs = 0;
+
+    private static final double RPM_TOL = 150;
+    private static final long RPM_STABLE_MS = 80;
+    private long rpmInRangeSinceMs = 0;
+    private Pose robotPose;
+    private double rpm = 0.0;
+
+
+    private boolean rpmInRangeStable() {
+        // exactly your TeleOp asymmetric gate: [TARGET-100, TARGET+20]
+        boolean inRange = (rpm >= (flywheelTargetRPM - RPM_TOL)) && (rpm <= (flywheelTargetRPM + 150));
+        long now = System.currentTimeMillis();
+
+        if (!inRange) {
+            rpmInRangeSinceMs = 0;
+            return false;
+        }
+        if (rpmInRangeSinceMs == 0) rpmInRangeSinceMs = now;
+        return (now - rpmInRangeSinceMs) >= RPM_STABLE_MS;
+    }
+
+    private void startStep(int newStep) {
+        outtakeStep = newStep;
+        stepStartMs = System.currentTimeMillis();
+    }
+
+    private static final long OUTTAKE_INITIAL_DELAY_MS = 150;
+    private static final long OUTTAKE_EJECTOR_UP_MS     = 250;
+    private static final long OUTTAKE_EJECTOR_DOWN_MS   = 250;
+    private static final long OUTTAKE_SPINNER_MOVE_MS   = 150;
+
+    // latch so shoot stages BLOCK until outtakeMode finishes
+    private boolean shootStageStarted = false;
 
     /* ================= TARGET ================= */
 
+    // Example target (field coordinates)
+    private double xC = 0;
+    private double yC = 144;
     private boolean aimingEnabled = false;
     private boolean launcherEnabled = false;
     final double[][] launchZoneBig = {{-18,144},{162,144},{72,55}};
     final double[][] launchZoneSmall = {{40,0},{102,0},{72,32}};
+    final double maxLauncherPower = 0.7;
     final double absoluteTurretHeight = 0.25; //meters
-    final double absoluteTargetHeight = 1.0; //meters
+    final double absoluteTargetHeight = 0.9; //meters
     final double relativeHeight = absoluteTargetHeight - absoluteTurretHeight;
-    final double absoluteObstacleHeight = 1.1; //meters
-    final double relativeObstacleTargetDistance = 0.465; //meters
-    final double launcherEfficiency = 0.425; // needs experimenting (0.46 calculated)
+    final double prefferedMaxHeightThrow = relativeHeight + 0.3; //meters (relative to turret height)
+    final double launcherEfficiency = 0.43; // needs experimenting
     final double flywheelRadius = 0.048;
     final double g = 9.81;
     final double trajectoryAngleModifierGearRatio = 127/15.0;
     final double trajectoryAnglerMaxTravel = 300.0;
     final double trajectoryAnglePosPerDegree = trajectoryAngleModifierGearRatio/trajectoryAnglerMaxTravel;
     final double minTrajectoryAngle = 50.2;
-    final double maxTrajectoryAngle = 70.0;
+    final double maxTrajectoryAngle = 70;
     final double startTurretAngle = -180.0;
     final double turretOffsetX = 0.0;
-    final double turretOffsetY =  -52/1000.0;
-    final int launcherStartRPM = 2000;
+    final double turretOffsetY = 52/1000.0;
+    final double launcherStartRPM = 3000.0;
     final double TICKS_PER_REV_FLYWHEEL = 28;
     final int maxFlywheelRPM = 6000;
     final int telemetryDelay = 200;
-    private final ElapsedTime telemetryTimer = new ElapsedTime();
-    private final ElapsedTime loopTime = new ElapsedTime();
+    private ElapsedTime telemetryTimer = new ElapsedTime();
+    int outtakeStep = 0;
+    int[] logicalSlots = new int[3];
     int[] lastNIntake = new int[5];
     int idxIntake = 0;
     boolean spinnerMoving = false;
@@ -142,153 +193,97 @@ public class TeleOpStefan extends LinearOpMode {
     boolean colorPending = false;
     boolean waitingForClear = false;
     int lastStableIntakeColor = 0;
+    private boolean launchPrepActive = false;
     double error = 0;
     double targetTurretDeg = 0;
     double currentTurretDeg = 0;
-    boolean enabledSorting = false;
-    int motifIndex = 0;
-    int nextOuttakeSlot = -1;
-    int lastOuttakeSlot = -1;
-    int[] OuttakeSlotColors = {0,0,0};
-    int[] Motif = {1,2,1};
-    int[] IntakeSlotColors = {0,0,0};
-    static final int RPM_BUF = 8;
-    static final double RPM_STD_MAX = 35;
-    static final double RPM_ERR_MAX = 60;
-
-    double[] rpmBuf = new double[RPM_BUF];
-    int rpmIdx = 0;
-
 
 
     private void updateLauncher(){
         double ticksPerSecond =
-                flywheelTargetRPM * TICKS_PER_REV_FLYWHEEL / 60.0;
+                (flywheelTargetRPM - 100) * TICKS_PER_REV_FLYWHEEL / 60.0;
         flywheel.setVelocity(ticksPerSecond);
+        rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
     }
     private void updateTrajectoryAngle(){
         setTrajectoryAngle(trajectoryAngle);
     }
-    private void updateShooter() {
-        // --- 1. Robot pose and velocity in field frame ---
-        double robotX = pose.getX();
-        double robotY = pose.getY();
-        double robotHeadingRad = pose.getHeading(); // radians
-        double robotHeadingDeg = Math.toDegrees(robotHeadingRad);
+    private void computeParameters() {
+        double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
 
-        double vRobotX = velocity.getX() / 1000.0; // robot frame m/s
-        double vRobotY = velocity.getY() / 1000.0;
-
-        // Rotate robot velocity into field frame
-        double fieldVelX = vRobotX * Math.cos(robotHeadingRad) - vRobotY * Math.sin(robotHeadingRad);
-        double fieldVelY = vRobotX * Math.sin(robotHeadingRad) + vRobotY * Math.cos(robotHeadingRad);
-
-        // --- 2. Turret world position ---
-        turretX = robotX + turretOffsetX * Math.cos(robotHeadingRad) - turretOffsetY * Math.sin(robotHeadingRad);
-        turretY = robotY + turretOffsetX * Math.sin(robotHeadingRad) + turretOffsetY * Math.cos(robotHeadingRad);
-
-        // --- 3. Vector to target ---
-        double dx = targetX - turretX;
-        double dy = targetY - turretY;
-        double distance = Math.hypot(dx, dy);
-
-        if (distance < 1e-3) return; // target too close
-
-        // --- 4. Compute trajectory angle with obstacle avoidance ---
-        double d = distance * 0.0254; // meters
-        double d1 = d - relativeObstacleTargetDistance;
-
-        double k = (d*d*(absoluteObstacleHeight - absoluteTurretHeight) - d1*d1*relativeHeight)
-                / (d*d1*relativeObstacleTargetDistance);
-        double idealAngle = Math.toDegrees(Math.atan(k));
-        boolean constrained = (idealAngle > maxTrajectoryAngle || idealAngle < minTrajectoryAngle);
-        trajectoryAngle = constrained
-                ? (idealAngle > maxTrajectoryAngle ? maxTrajectoryAngle : minTrajectoryAngle)
-                : idealAngle;
-
-        double thetaRad = Math.toRadians(trajectoryAngle);
-        double cosTheta = Math.cos(thetaRad);
-        double tanTheta = Math.tan(thetaRad);
-
-        double denominator;
-        if (!constrained) {
-            denominator = (d1*tanTheta - (absoluteObstacleHeight - absoluteTurretHeight)) / (d1*d1);
-        } else {
-            double h1 = absoluteTurretHeight + d1*tanTheta - (d1*d1)/(d*d)*(d*tanTheta - relativeHeight);
-            denominator = (d1*tanTheta - (h1 - absoluteTurretHeight)) / (d1*d1);
-        }
-
-        if (Math.abs(cosTheta) < 1e-6 || denominator <= 0) {
-            flywheelTargetRPM = minFlywheelRPM;
+        if (d <= 0) {
+            flywheelTargetRPM = 3000;
+            trajectoryAngle = maxTrajectoryAngle;
             return;
         }
 
-        // --- 5. Compute required world-frame launch speed ---
-        double vWorld = Math.sqrt(g / (2 * cosTheta * cosTheta * denominator));
+        // Calculate k as per your formula
+        double k = (4.0 * prefferedMaxHeightThrow / d)
+                * (1.0 - Math.sqrt(1.0 - relativeHeight / prefferedMaxHeightThrow));
 
-        // --- 6. Compute shot direction unit vector ---
-        double shotDirX = dx / distance;
-        double shotDirY = dy / distance;
+        // Calculate the ideal angle based on physics
+        double idealAngle = Math.toDegrees(Math.atan(k));
 
-        // --- 7. Estimate time-of-flight for lead ---
-        double vHorizontal = vWorld * cosTheta;
-        double tFlight = distance / Math.max(vHorizontal, 0.1); // seconds, prevent div0
+        // Check if angle is constrained
+        boolean constrained = (idealAngle > maxTrajectoryAngle || idealAngle < minTrajectoryAngle);
 
-        // --- 8. Project robot velocity along and lateral to shot ---
-        double robotVelAlongShot = fieldVelX * shotDirX + fieldVelY * shotDirY;
-        double robotVelLateral = fieldVelX * (-shotDirY) + fieldVelY * shotDirX;
+        if (constrained) {
+            // Angle is outside limits, clamp it and recalculate velocity
+            trajectoryAngle = (idealAngle > maxTrajectoryAngle) ? maxTrajectoryAngle : minTrajectoryAngle;
 
-        // --- 9. Apply lead to target vector ---
-        dx -= robotVelAlongShot * tFlight;
-        dy -= robotVelLateral * tFlight;
+            double thetaRad = Math.toRadians(trajectoryAngle);
+            double sinTheta = Math.sin(thetaRad);
+            double cosTheta = Math.cos(thetaRad);
+            double tanTheta = Math.tan(thetaRad);
 
-        // --- 10. Compute final turret field angle ---
-        double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
+            // When angle is constrained, we need to solve for exit velocity
+            // using the projectile motion equation for a fixed angle
 
-        currentTurretDeg =
-                turret.getCurrentPosition() * DEG_PER_TICK_TURRET + startTurretAngle;
-        currentTurretDeg = normalizeAngle(currentTurretDeg);
+            // Solve for exit velocity using the full projectile equation:
+            // h = d*tanθ - (g*d²)/(2*v₀²*cos²θ)
+            // Rearranged: v₀ = sqrt((g*d²) / (2*cos²θ*(d*tanθ - h)))
 
-        if (aimingEnabled) {
-            targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
+            if (Math.abs(cosTheta) < 1e-6) {
+                return; // Avoid division by zero
+            }
+
+            double denominator = d * tanTheta - relativeHeight;
+
+            if (denominator <= 0) {
+                // Target is too close or angle too shallow
+                flywheelTargetRPM = minFlywheelRPM;
+                return;
+            }
+
+            double exitVelocity = Math.sqrt((g * d * d) /
+                    (2 * cosTheta * cosTheta * denominator));
+
+            // Convert to RPM
+            flywheelTargetRPM = (int)(60 * exitVelocity /
+                    (2 * Math.PI * flywheelRadius * launcherEfficiency));
+
         } else {
-            targetTurretDeg = startTurretAngle;
+            // Angle is within limits, use your formula directly
+            trajectoryAngle = idealAngle;
+
+            double thetaRad = Math.toRadians(trajectoryAngle);
+            double sinTheta = Math.sin(thetaRad);
+
+            if (Math.abs(sinTheta) < 1e-6) {
+                return;
+            }
+
+            // Your formula: v₀ = √(2gh₀)/sinθ
+            double v0 = Math.sqrt(2 * g * prefferedMaxHeightThrow) / sinTheta;
+
+            // n = 60v₀/(2πr) * 1/η
+            flywheelTargetRPM = (int)(60 * v0 / (2 * Math.PI * flywheelRadius * launcherEfficiency));
         }
 
-// --- Soft limits EXACTLY like working code ---
-        if (targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT) {
-            targetTurretDeg = LEFT_LIMIT;
-        } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
-            targetTurretDeg = RIGHT_LIMIT;
-        }
-
-// --- Closed-loop turret control ---
-        error = normalizeAngle(targetTurretDeg - currentTurretDeg);
-        power = error * kP;
-        power = Range.clip(power, -MAX_TURRET_POWER, MAX_TURRET_POWER);
-        turret.setPower(power);
-
-
-        // --- 13. Compensate flywheel speed for robot motion along shot ---
-        double turretYawFieldRad = robotHeadingRad + Math.toRadians(targetTurretDeg);
-        double shotDirCompX = Math.cos(turretYawFieldRad);
-        double shotDirCompY = Math.sin(turretYawFieldRad);
-        double robotVelAlongShotComp = fieldVelX * shotDirCompX + fieldVelY * shotDirCompY;
-
-        v0 = vWorld - robotVelAlongShotComp;
-        if (v0 <= 0) {
-            flywheelTargetRPM = minFlywheelRPM;
-        } else {
-            flywheelTargetRPM = (int) (60 * v0 / (2 * Math.PI * flywheelRadius * launcherEfficiency));
-            flywheelTargetRPM = Math.max(minFlywheelRPM, Math.min(flywheelTargetRPM, maxFlywheelRPM));
-        }
-
-        // --- 14. Update trajectory angle servo ---
-        setTrajectoryAngle(trajectoryAngle);
-        // --- 15. Update flywheel ---
-        updateLauncher();
+        // Clamp RPM values
+        flywheelTargetRPM = Math.max(minFlywheelRPM, Math.min(flywheelTargetRPM, maxFlywheelRPM));
+        // Note: trajectoryAngle will be clamped again in setTrajectoryAngle()
     }
-
     private void setTrajectoryAngle(double angle){
         angle = Range.clip(angle,minTrajectoryAngle,maxTrajectoryAngle);
         double position = (angle - minTrajectoryAngle)*trajectoryAnglePosPerDegree;
@@ -324,7 +319,7 @@ public class TeleOpStefan extends LinearOpMode {
     public void enableLauncher(){
         if(launcherEnabled) return;
         launcherEnabled = true;
-        flywheelTargetRPM = launcherStartRPM;
+        flywheelTargetRPM = 2000;
         updateLauncher();
     }
     public void disableLauncher(){
@@ -341,39 +336,9 @@ public class TeleOpStefan extends LinearOpMode {
     }
     private void initLocalization() {
         pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
-        startPose = new Pose(22, 127, Math.toRadians(-36));
+        startPose = new Pose(63.5, 8, Math.toRadians(90));
         pinpoint.setStartPose(startPose);
     }
-    private void mapIntakeToOuttakeSlots() {
-        for (int i = 0; i < 3; i++) {
-            OuttakeSlotColors[2 - i] = IntakeSlotColors[i];
-        }
-    }
-    private void selectNextOuttakeSlot() {
-        nextOuttakeSlot = -1;
-        if(enabledSorting) {
-            for (int i = 0; i < 3; i++) {
-                if (OuttakeSlotColors[i] == Motif[motifIndex]) {
-                    nextOuttakeSlot = i;
-                    OuttakeSlotColors[i] = 0;
-                    break;
-                }
-            }
-            motifIndex = (motifIndex + 1) % Motif.length;
-        }
-
-        // If no match, just take the next available ball
-        if (nextOuttakeSlot == -1) {
-            for (int i = 0; i < 3; i++) {
-                if (OuttakeSlotColors[i] != 0) {
-                    nextOuttakeSlot = i;
-                    OuttakeSlotColors[i] = 0;
-                    break;
-                }
-            }
-        }
-    }
-
 
     private void InitWheels() {
         front_left = hardwareMap.dcMotor.get("lf");
@@ -392,14 +357,12 @@ public class TeleOpStefan extends LinearOpMode {
         intake = hardwareMap.get(DcMotor.class, "intake");
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
-        turret = hardwareMap.get(DcMotorEx.class, "tureta");
-        turret.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
-        turret.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
-        turret.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
-        PIDFCoefficients pidfCoefficientsFlywheel = new PIDFCoefficients(15.1, 0, 0, 12.45);
-        flywheel.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,pidfCoefficientsFlywheel);
+        tureta = hardwareMap.get(DcMotorEx.class, "tureta");
+        tureta.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
+        tureta.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
+        tureta.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
+        PIDFCoefficients pidfCoefficients = new PIDFCoefficients(14, 2.3, 4, 14.45);
+        flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,pidfCoefficients);
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
     }
@@ -409,16 +372,51 @@ public class TeleOpStefan extends LinearOpMode {
         return angle;
     }
 
+    private void updateTurretAim() {
+
+        double robotX = pose.getX();
+        double robotY = pose.getY();
+        double robotHeading = pose.getHeading();
+        double robotHeadingDeg = Math.toDegrees(robotHeading);
+        turretX = robotX + turretOffsetX*Math.cos(robotHeading) - turretOffsetY*Math.sin(robotHeading);
+        turretY = robotY + turretOffsetX*Math.sin(robotHeading) + turretOffsetY*Math.cos(robotHeading);
+        double dx = targetX - turretX;
+        double dy = targetY - turretY;
+
+        double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
+
+        currentTurretDeg = tureta.getCurrentPosition() * DEG_PER_TICK_TURETA + startTurretAngle;
+        if(aimingEnabled) {
+            targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
+        } else {
+            targetTurretDeg = startTurretAngle;
+        }
+        currentTurretDeg=normalizeAngle(currentTurretDeg);
+        if(targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT){
+            targetTurretDeg = LEFT_LIMIT;
+        } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
+            targetTurretDeg = RIGHT_LIMIT;
+        }
+
+        error = normalizeAngle(targetTurretDeg - currentTurretDeg);
+
+        power = error * kP;
+        power = Range.clip(power, -MAX_POWER_TURETA, MAX_POWER_TURETA);
+        tureta.setPower(power);
+    }
+
+
+
     private void InitServo() {
         ejector = hardwareMap.get(Servo.class, "ejector");
         spinnerFar = hardwareMap.get(Servo.class, "SpinnerFar");
-        spinnerClose = hardwareMap.get(Servo.class, "SpinnerClose");
+        spinnerCLose = hardwareMap.get(Servo.class, "SpinnerClose");
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
+        setTrajectoryAngle(maxTrajectoryAngle);
         ejector.setDirection(Servo.Direction.REVERSE);
         ejector.setPosition(ejectorDown);
-        trajectoryAngleModifier.setPosition(0);
         spinnerFar.setPosition(0);
-        spinnerClose.setPosition(0);
+        spinnerCLose.setPosition(0);
     }
 
     private void InitLL() {
@@ -435,9 +433,10 @@ public class TeleOpStefan extends LinearOpMode {
     }
 
     private void InitAux() {
-        colorSensorSlot1 = hardwareMap.colorSensor.get("Color1");
-        colorSensorSlot2 = hardwareMap.colorSensor.get("Color2");
-        colorSensorSlot3 = hardwareMap.colorSensor.get("Color3");
+        colorsensorSLot1 = hardwareMap.colorSensor.get("Color1");
+        colorsensorSLot2 = hardwareMap.colorSensor.get("Color2");
+        colorsensorSLot3 = hardwareMap.colorSensor.get("Color3");
+        pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
     }
 
 
@@ -487,104 +486,134 @@ public class TeleOpStefan extends LinearOpMode {
     }
 
 
-    private int colorDetection(ColorSensor sensor) {
-        int r = sensor.red();
-        int g = sensor.green();
-        int b = sensor.blue();
-        int alpha = sensor.alpha();
+    private int smekerie1(ColorSensor colorSensor) {
+        int r = colorSensor.red();
+        int g = colorSensor.green();
+        int b = colorSensor.blue();
+        int alpha = colorSensor.alpha();
+        double h = getHue(r, g, b);
+        int detected;
+        if (alpha < 100 && (h == 150 || h == 144)) detected = 0;
+        else if ((h > 215) || (alpha < 100 && (h == 160 || h == 180))) detected = 2;
+        else if (h > 135 && h < 160 && alpha > 100) detected = 1;
+        else if ((h == 140 || h == 145) && alpha == 43) detected = 0;
+        else if (h > 135 && h < 160 && alpha > 60) detected = 1;
+        else if ((h == 210 || h == 220 || h == 225 || h == 200) && alpha < 100) detected = 2;
+        else detected = 0;
+        return detected;
+    }
 
-        // Skip if the ball is too dim (likely floor reflection or empty slot)
-        if (alpha < 50) return 0;
+    private int CuloareFinala1(ColorSensor sensor, int[] last5, int index) {
+        last5[index] = smekerie1(sensor);
 
-        // Convert RGB to Hue
-        double hue = getHue(r, g, b);
+        int count1 = 0, count2 = 0;
+        for (int v : last5) {
+            if (v == 1) count1++;
+            else if (v == 2) count2++;
+        }
 
-        // Green ball range (tuned for FTC field lighting)
-        if (hue >= 130 && hue <= 170) return 1;
-
-        // Purple ball range
-        if (hue >= 200 && hue <= 230) return 2;
-
-        // Default: no ball
+        if (count1 >= 3) return 1;
+        if (count2 >= 3) return 2;
         return 0;
     }
 
-private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, int lastStable, boolean waitingForClearFlag) {
-    if (spinnerMoving) return lastStable; // block all updates while spinner is moving
-    if (waitingForClearFlag) {
-        int colorNow = colorDetection(sensor);
-        if (colorNow == 0) { // cleared
-            return 0;
-        } else {
-            return lastStable; // keep waiting
-        }
-    }
-    last5[index] = colorDetection(sensor);
-    int count1 = 0, count2 = 0;
-    for (int v : last5) {
-        if (v == 1) count1++;
-        else if (v == 2) count2++;
-    }
-    if (count1 >= 3) return 1;
-    if (count2 >= 3) return 2;
-    return 0;
-}
 
 
-    private void updateColors() {
-        Color1 = processSensorWithLock(colorSensorSlot1, last5Sensor1, indexSensor1, Color1, waitingForClear);
+    private void updateCulori() {
+        Color1 = CuloareFinala1(colorsensorSLot1, last5Sensor1, indexSensor1);
         indexSensor1 = (indexSensor1 + 1) % 5;
-
-        Color2 = processSensorWithLock(colorSensorSlot2, last5Sensor2, indexSensor2, Color2, spinnerMoving);
+        Color2 = CuloareFinala1(colorsensorSLot2, last5Sensor2, indexSensor2);
         indexSensor2 = (indexSensor2 + 1) % 5;
-
-        Color3 = processSensorWithLock(colorSensorSlot3, last5Sensor3, indexSensor3, Color3, spinnerMoving);
+        Color3 = CuloareFinala1(colorsensorSLot3, last5Sensor3, indexSensor3);
         indexSensor3 = (indexSensor3 + 1) % 5;
-
-        IntakeSlotColors[0] = Color1;
-        IntakeSlotColors[1] = Color2;
-        IntakeSlotColors[2] = Color3;
     }
 
 
     private void servoLogic() {
+        if (gamepad1.touchpadWasPressed())
+            Posspinner = 0;
+        //0.19=60 de grade
         if (gamepad1.dpadRightWasPressed()) {
             slotIntakeIndex++;
             slotIntakeIndex = slotIntakeIndex % 3;
-            PosSpinner = slotPositionsIntake[slotIntakeIndex];
+            Posspinner = slotPositionsIntake[slotIntakeIndex];
         }
         if (gamepad1.dpadLeftWasPressed()){
             slotIntakeIndex--;
-            slotIntakeIndex = (slotIntakeIndex + 3) % 3;
-            PosSpinner = slotPositionsIntake[slotIntakeIndex];
+            if(slotIntakeIndex < 0) slotIntakeIndex = 2;
+            Posspinner = slotPositionsIntake[slotIntakeIndex];
         }
     }
 
     private boolean spinnerFull() {
-        return (Color1 != 0 && Color2 != 0 && Color3 != 0) || slotIntakeIndex == 3;
-    }
-    private boolean flywheelReady() {
-        rpmBuf[rpmIdx] = getFlywheelRPM();
-        rpmIdx = (rpmIdx + 1) % RPM_BUF;
-
-        double mean = 0;
-        for (double r : rpmBuf) mean += r;
-        mean /= RPM_BUF;
-
-        double var = 0;
-        for (double r : rpmBuf) var += (r - mean) * (r - mean);
-        var /= RPM_BUF;
-
-        return Math.sqrt(var) < RPM_STD_MAX &&
-                Math.abs(mean - flywheelTargetRPM) < RPM_ERR_MAX;
+        return detectedBalls == 3;
     }
 
     private double getFlywheelRPM() {
         return flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
     }
 
+    private double calculateBang(double targetRPM, double currentRPM) {
+
+        if (currentRPM < targetRPM - flywheelTolerance) {
+            return flywheelPowerHigh;   // accelerează
+        } else if (currentRPM > targetRPM + flywheelTolerance) {
+            return flywheelPowerLow;    // coast
+        } else {
+            return flywheelPowerLow;    // menține
+        }
+    }
+
+
+    //    private void colorDrivenSpinnerLogic() {
+//        final int SPINNER_SLOT_CHANGE_DELAY = 150;
+//        detectedBalls = 0;
+//        if (Color1 != 0) detectedBalls++;
+//        if (Color2 != 0) detectedBalls++;
+//        if (Color3 != 0) detectedBalls++;
+//
+//        if (Color1!=0) {
+//
+//            switch (detectedBalls) {
+//                case 1:
+//                    if(Posspinner != 0.19) {
+//                        Posspinner = 0.19;
+//                        prev_t_intake = t_intake + SPINNER_SLOT_CHANGE_DELAY;
+//                    }
+//                    break;
+//                case 2:
+//                    if(Posspinner != 0.38) {
+//                        Posspinner = 0.38;
+//                        prev_t_intake = t_intake + SPINNER_SLOT_CHANGE_DELAY;
+//                    }
+//                    break;
+//                case 3:
+//                    if(Posspinner != 0.085) {
+//                        Posspinner = 0.085;
+//                        prev_t_intake = t_intake + SPINNER_SLOT_CHANGE_DELAY;
+//                    }
+//                    intakeMode = false;
+//                    break;
+//            }
+//        }
+//    }
+    private void rotateLogicalSlotsRight() {
+        int temp = logicalSlots[2];
+        logicalSlots[2] = logicalSlots[1];
+        logicalSlots[1] = logicalSlots[0];
+        logicalSlots[0] = temp;
+    }
+
+    private void rotateLogicalSlotsLeft() {
+        int temp = logicalSlots[0];
+        logicalSlots[0] = logicalSlots[1];
+        logicalSlots[1] = logicalSlots[2];
+        logicalSlots[2] = temp;
+    }
+
+    // ULTRA-FAST intake smoothing: 3 samples, need 2
     private int processIntakeSensor(ColorSensor sensor) {
-        int detected = colorDetection(sensor);
+        int detected = smekerie1(sensor);
 
         lastNIntake[idxIntake] = detected;
         idxIntake = (idxIntake + 1) % lastNIntake.length;
@@ -605,7 +634,6 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
     private void colorDrivenSpinnerLogicServos() {
 
         // Servo movement lock window (shorter for faster cycling)
-        if(spinnerFull()) return;
         if (spinnerMoving) {
             if (System.currentTimeMillis() - servoMoveStartMs >= SERVO_MOVE_LOCK_MS) {
                 spinnerMoving = false;
@@ -618,7 +646,7 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
 
         // Must clear before we allow another ball
         if (waitingForClear) {
-            int intakeColorNow = processIntakeSensor(colorSensorSlot1);
+            int intakeColorNow = processIntakeSensor(colorsensorSLot1);
             if (intakeColorNow == 0) {
                 waitingForClear = false;
                 lastStableIntakeColor = 0;
@@ -627,7 +655,7 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
         }
 
         // Intake-facing sensor (change if needed)
-        int intakeColor = processIntakeSensor(colorSensorSlot1);
+        int intakeColor = processIntakeSensor(colorsensorSLot1);
 
         // FAST trigger: first nonzero after clear
         boolean newColorDetected = (intakeColor != 0 && lastStableIntakeColor == 0);
@@ -642,17 +670,13 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
 
         if (colorPending && (System.currentTimeMillis() - colorStartTimeMs >= DETECT_DELAY_MS)) {
 
-            Color1 = intakeColor;
+            logicalSlots[0] = intakeColor;
+            rotateLogicalSlotsRight();
+
+            // Advance servo one step
             slotIntakeIndex++;
-            if(slotIntakeIndex == 3) {
-                waitingForClear = true;
-                detectionLocked = true;
-                spinnerMoving = false;   // no movement, but block logic
-                colorPending = false;
-                return;
-            }
-            slotIntakeIndex = slotIntakeIndex % 3;
-            PosSpinner = slotPositionsIntake[slotIntakeIndex];
+            slotIntakeIndex = slotIntakeIndex % 4;
+            Posspinner = slotPositionsIntake[slotIntakeIndex];
 
             waitingForClear = true;
             detectionLocked = true;
@@ -667,116 +691,259 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
         pinpoint.setPose(startPose);
     }
 
-        private void updateTelemetry() {
+    private void updateTelemetry() {
         if(telemetryTimer.milliseconds() >= telemetryDelay) {
-            if (spinnerState == SpinnerState.OUTTAKE) {
-                telemetry.addData("Slot 1", OuttakeSlotColors[0]);
-                telemetry.addData("Slot 2", OuttakeSlotColors[1]);
-                telemetry.addData("Slot 3", OuttakeSlotColors[2]);
+            if (outtakeMode) {
+                telemetry.addData("Slot 1", slots[0]);
+                telemetry.addData("Slot 2", slots[1]);
+                telemetry.addData("Slot 3", slots[2]);
             }
-            if (spinnerState == SpinnerState.INTAKE) {
-                telemetry.addData("Slot 1", IntakeSlotColors[0]);
-                telemetry.addData("Slot 2", IntakeSlotColors[1]);
-                telemetry.addData("Slot 3", IntakeSlotColors[2]);
+            if (intakeMode) {
+                telemetry.addData("Slot 1", Color1);
+                telemetry.addData("Slot 2", Color2);
+                telemetry.addData("Slot 3", Color3);
             }
 
-            telemetry.addData("time_outtake", outtakeTimeout.time());
-            telemetry.addData("PosSpinner", PosSpinner);
-            telemetry.addData("X", pose.getX());
-            telemetry.addData("Y", pose.getY());
-            telemetry.addData("Heading", "%.1f", Math.toDegrees(pose.getHeading()));
-            telemetry.addData("Sensor 1a", colorSensorSlot1.alpha());
-            telemetry.addData("Sensor 2a", colorSensorSlot2.alpha());
-            telemetry.addData("Sensor 3a", colorSensorSlot3.alpha());
-            telemetry.addData("Sensor 1", getHue(colorSensorSlot1.red(), colorSensorSlot1.green(), colorSensorSlot1.blue()));
-            telemetry.addData("Sensor 2", getHue(colorSensorSlot2.red(), colorSensorSlot2.green(), colorSensorSlot2.blue()));
-            telemetry.addData("Sensor 3", getHue(colorSensorSlot3.red(), colorSensorSlot3.green(), colorSensorSlot3.blue()));
+            telemetry.addData("timp_outtake", outtakeTimeout.time());
+            telemetry.addData("x", pose.getX());
+            telemetry.addData("y", pose.getY());
+            telemetry.addData("heading", pose.getHeading());
+            telemetry.addData("unghiSPinner", spinnerFar.getPosition());
+            telemetry.addData("balls", detectedBalls);
+
+            telemetry.addData("Sensor 1a", colorsensorSLot1.alpha());
+            telemetry.addData("Sensor 2a", colorsensorSLot2.alpha());
+            telemetry.addData("Sensor 3a", colorsensorSLot3.alpha());
+            telemetry.addData("Sensor 1", getHue(colorsensorSLot1.red(), colorsensorSLot1.green(), colorsensorSLot1.blue()));
+            telemetry.addData("Sensor 2", getHue(colorsensorSLot2.red(), colorsensorSLot2.green(), colorsensorSLot2.blue()));
+            telemetry.addData("Sensor 3", getHue(colorsensorSLot3.red(), colorsensorSLot3.green(), colorsensorSLot3.blue()));
             telemetry.addData("Target (raw)", "%.1f", targetTurretDeg);
+            telemetry.addData("Turret", "%.1f", currentTurretDeg);
             telemetry.addData("Error", "%.1f", error);
             telemetry.addData("Power", "%.2f", power);
             telemetry.addData("Flywheel Target RPM", flywheelTargetRPM);
             telemetry.addData("Flywheel RPM", getFlywheelRPM());
+            telemetry.addData("X", "%.1f", pX);
+            telemetry.addData("Y", "%.1f", pY);
             telemetry.addData("Heading", "%.1f",
                     Math.toDegrees(pose.getHeading()));
             telemetry.addData("trajectoryAngle",trajectoryAngle);
-            telemetry.addData("loopTime", loopTime.milliseconds());
-            telemetry.addData("Turret", "%.1f", currentTurretDeg);
             telemetry.update();
             telemetryTimer.reset();
         }
     }
 
     private void runIntake(){
-            updateColors();
-            colorDrivenSpinnerLogicServos();
-        
-    }
-    enum OuttakeState {
-        SELECT_SLOT,
-        EJECT_UP,
-        EJECT_DOWN
-    }
-    OuttakeState outtakeState = OuttakeState.SELECT_SLOT;
-
-    private void runOuttake() {
-        spinIntake = true;
-        final int EJECTOR_UP_DELAY = 250;
-        final int EJECTOR_DOWN_DELAY = 200;
-        final int SPINNER_SLOT_CHANGE_DELAY = 300;
-        mapIntakeToOuttakeSlots();
-        double t = outtakeTimeout.milliseconds();
-        if(t >= prev_t_outtake){
-            switch (outtakeState) {
-                case SELECT_SLOT:
-                    selectNextOuttakeSlot();
-                    if(nextOuttakeSlot == -1) {
-                        outtakeState = OuttakeState.SELECT_SLOT;
-                        prev_t_outtake = t;
-                        PosSpinner = slotPositionsIntake[0];
-                        spinnerState = SpinnerState.INTAKE;
-                        spinIntake = true;
-                        slotIntakeIndex = 0;
-                        waitingForClear = true;
-                        detectionLocked = false;
-                        spinnerMoving = true;
-                        colorPending = false;
-                        lastStableIntakeColor = 0;
-                        Arrays.fill(lastNIntake, 0);
-                        idxIntake = 0;
-                        return;
-                    }
-                    PosSpinner = slotPositionsOuttake[nextOuttakeSlot];
-                    prev_t_outtake = t + SPINNER_SLOT_CHANGE_DELAY * Math.abs(lastOuttakeSlot - nextOuttakeSlot);
-                    lastOuttakeSlot = nextOuttakeSlot;
-                    outtakeState = OuttakeState.EJECT_UP;
-                    break;
-                case EJECT_UP:
-                    if(!flywheelReady()) return;
-                    ejector.setPosition(ejectorUp);
-                    prev_t_outtake = t + EJECTOR_UP_DELAY;
-                    outtakeState = OuttakeState.EJECT_DOWN;
-                    break;
-                case EJECT_DOWN:
-                    ejector.setPosition(ejectorDown);
-                    prev_t_outtake = t + EJECTOR_DOWN_DELAY;
-                    outtakeState = OuttakeState.SELECT_SLOT;
-                    break;
+        t_intake = intakeTimeout.milliseconds();
+        if(t_intake >= prev_t_intake) {
+            updateCulori();
+            if(!launchPrepActive){
+                colorDrivenSpinnerLogicServos();
             }
         }
+
+
     }
-    private void startIntakeMode(){
-        spinnerState = SpinnerState.INTAKE;
-        spinIntake = true;
-        slotIntakeIndex = 0;
-        PosSpinner = slotPositionsIntake[0];
-        waitingForClear = true;
+    //    private void runOuttake() {
+//        intake.setPower(1);
+//        final int EJECTOR_UP_DELAY = 200;
+//        final int EJECTOR_DOWN_DELAY = 150;
+//        final int SPINNER_SLOT_CHANGE_DELAY = 300;
+//        final int INITIAL_DELAY = 200;
+//
+//        slots[0] = Color1;
+//        slots[1] = Color2;
+//        slots[2] = Color3;
+//
+//        Color1 = 0;
+//        Color2 = 0;
+//        Color3 = 0;
+//
+//
+//        double t = outtakeTimeout.milliseconds();
+//        if(t >= prev_t_outtake){
+//            switch (outtakeStep++) {
+//                case 0:
+//                    Posspinner = 0.085;
+//                    prev_t_outtake = t + INITIAL_DELAY;
+//                    break;
+//                case 1:
+//                case 7:
+//                case 4:
+//                    ejector.setPosition(ejectorUp);
+//                    prev_t_outtake = t + EJECTOR_UP_DELAY;
+//                    break;
+//                case 2:
+//                case 8:
+//                case 5:
+//                    ejector.setPosition(ejectorDown);
+//                    prev_t_outtake = t + EJECTOR_DOWN_DELAY;
+//                    break;
+//                case 3:
+//                    Posspinner = 0.28;
+//                    prev_t_outtake = t + SPINNER_SLOT_CHANGE_DELAY;
+//                    break;
+//                case 6:
+//                    Posspinner = 0.46;
+//                    prev_t_outtake = t + SPINNER_SLOT_CHANGE_DELAY;
+//                    break;
+//                case 9:
+//                    Posspinner = 0;
+//                    outtakeStep = 0;
+//                    outtakeMode = false;
+//                    intakeMode = true;
+//                    ballsLoaded = 0;
+//                    prev_t_outtake = 0;
+//                    break;
+//            }
+//        }
+//    }
+    private void runOuttake() {
+        // keep feeding while shooting
+        intake.setPower(1);
+
+        long now = System.currentTimeMillis();
+        long dt = now - stepStartMs;
+
+        switch (outtakeStep) {
+
+            case 0:
+                // snapshot inventory once
+                slots[0] = logicalSlots[0];
+                slots[1] = logicalSlots[1];
+                slots[2] = logicalSlots[2];
+
+                // clear logical so intake recounts after
+                logicalSlots[0] = 0;
+                logicalSlots[1] = 0;
+                logicalSlots[2] = 0;
+
+                Color1 = 0;
+                Color2 = 0;
+                Color3 = 0;
+
+                // start at launch position
+                Posspinner = 0.095;
+
+                rpmInRangeSinceMs = 0;
+                startStep(1);
+                break;
+
+            case 1:
+                if (dt >= OUTTAKE_INITIAL_DELAY_MS) startStep(2);
+                break;
+
+            case 2:
+                // SHOOT #1 only when rpm stable in range
+                if (rpmInRangeStable()) {
+                    ejector.setPosition(ejectorUp);
+                    startStep(3);
+                }
+                break;
+
+            case 3:
+                if (dt >= OUTTAKE_EJECTOR_UP_MS) {
+                    ejector.setPosition(ejectorDown);
+                    startStep(4);
+                }
+                break;
+
+            case 4:
+                if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
+                    Posspinner = 0.285;
+                    startStep(5);
+                }
+                break;
+
+            case 5:
+                if (dt >= OUTTAKE_SPINNER_MOVE_MS) {
+                    rpmInRangeSinceMs = 0;
+                    startStep(6);
+                }
+                break;
+
+            case 6:
+                // SHOOT #2
+                if (rpmInRangeStable()) {
+                    ejector.setPosition(ejectorUp);
+                    startStep(7);
+                }
+                break;
+
+            case 7:
+                if (dt >= OUTTAKE_EJECTOR_UP_MS) {
+                    ejector.setPosition(ejectorDown);
+                    startStep(8);
+                }
+                break;
+
+            case 8:
+                if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
+                    Posspinner = 0.475;
+                    startStep(9);
+                }
+                break;
+
+            case 9:
+                if (dt >= OUTTAKE_SPINNER_MOVE_MS) {
+                    rpmInRangeSinceMs = 0;
+                    startStep(10);
+                }
+                break;
+
+            case 10:
+                // SHOOT #3
+                if (rpmInRangeStable()) {
+                    ejector.setPosition(ejectorUp);
+                    startStep(11);
+                }
+                break;
+
+            case 11:
+                if (dt >= OUTTAKE_EJECTOR_UP_MS) {
+                    ejector.setPosition(ejectorDown);
+                    startStep(12);
+                }
+                break;
+
+            case 12:
+                if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
+
+                    // end
+                    Posspinner = 0;
+
+                    outtakeMode = false;
+
+                    intakeMode = false;
+                    spinIntake = false;
+                    intake.setPower(0);
+
+                    slotIntakeIndex = 0;
+                    Posspinner = 0;
+
+                    launchPrepActive = false;
+                    resetIntakeGatingAndFilters();
+
+                    // reset shooter FSM
+                    outtakeStep = 0;
+                    stepStartMs = 0;
+                    rpmInRangeSinceMs = 0;
+                }
+                break;
+        }
+    }
+    private void resetIntakeGatingAndFilters() {
+        waitingForClear = false;
         detectionLocked = false;
-        spinnerMoving = true;
+        spinnerMoving = false;
         colorPending = false;
         lastStableIntakeColor = 0;
-        Arrays.fill(lastNIntake, 0);
+
+        for (int i = 0; i < lastNIntake.length; i++) lastNIntake[i] = 0;
         idxIntake = 0;
     }
+
+
 
 
 
@@ -790,22 +957,23 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
         initLocalization();
 
         waitForStart();
-        loopTime.reset();
+
         while (opModeIsActive()) {
-            if (PosSpinner >= PosSpinnerMin && PosSpinner <= PosSpinnerMax) {
-                spinnerFar.setPosition(PosSpinner);
-                spinnerClose.setPosition(PosSpinner);
+            if (Posspinner >= PosspinnerMin && Posspinner <= PosspinnerMax) {
+                spinnerFar.setPosition(Posspinner -0.02);
+                spinnerCLose.setPosition(Posspinner -0.02);
             }
 
             servoLogic();
             SetWheelsPower();
             pinpoint.update();
             pose = pinpoint.getPose();
-            velocity = pinpoint.getVelocity();
             disableIfNotInLaunchZone();
+            updateTurretAim();
             updateTelemetry();
             if(aimingEnabled){
-                updateShooter();
+                computeParameters();
+                updateLauncher();
                 updateTrajectoryAngle();
             }
             if(spinnerFull() && !aimingEnabled){
@@ -815,41 +983,64 @@ private int processSensorWithLock(ColorSensor sensor, int[] last5, int index, in
             }
             if (gamepad1.crossWasPressed()  && !gamepad1.crossWasReleased()){
                 intake.setPower(-1);
-            } else {
+            } else if (gamepad1.crossWasReleased()) {
                 intake.setPower(spinIntake ? 1:0);
-            }
-            if(gamepad1.touchpadWasPressed()){
-                enabledSorting = !enabledSorting;
-                gamepad1.rumble(enabledSorting ? 200 : 500);
             }
             if(gamepad1.optionsWasPressed() && gamepad1.shareWasPressed()){
                 resetLocalization();
-                gamepad1.rumble(200);
             }
             if (gamepad1.circleWasPressed()) {
-                startIntakeMode();
+                intakeTimeout.reset();
+                prev_t_intake = 0;
+                intake.setPower(1);
+                intakeMode = true;
+                spinIntake = !spinIntake;
+                intake.setPower(spinIntake ? 1: 0);
+                outtakeMode = false;
+                ballsLoaded = 0;
+                Posspinner = 0;
+                slotIntakeIndex = 0;
+
+                logicalSlots[0] = 0;
+                logicalSlots[1] = 0;
+                logicalSlots[2] = 0;
+
+                waitingForClear = false;
+                detectionLocked = false;
+                spinnerMoving = false;
+                colorPending = false;
+                lastStableIntakeColor = 0;
+
+                // Reset intake filter memory (prevents stale votes)
+                for (int i = 0; i < lastNIntake.length; i++) lastNIntake[i] = 0;
+                idxIntake = 0;
             }
-            if (gamepad1.right_trigger > 0.8) {
-                if(spinnerState == SpinnerState.INTAKE) {
-                    Arrays.fill(rpmBuf,getFlywheelRPM());
-                    outtakeTimeout.reset();
-                    outtakeState = OuttakeState.SELECT_SLOT;
-                    lastOuttakeSlot = -1;
-                    gamepad1.rumble(150);
-                }
-                spinnerState = SpinnerState.OUTTAKE;
-            }
+
 
             if (gamepad1.yWasPressed()) {
-                spinIntake = !spinIntake;
+                intake.setPower(0);
             }
 
-            if (spinnerState == SpinnerState.INTAKE) {
+            if (intakeMode && !outtakeMode) {
                 runIntake();
-            } else {
+
+            }
+
+
+            if (gamepad1.right_trigger > 0.8) {
+                if(!outtakeMode) {
+                    outtakeTimeout.reset();
+                    outtakeStep = 0;
+                }
+                outtakeMode = true;
+                intakeMode = false;
+                intake.setPower(0);
+
+            }
+
+            if (outtakeMode) {
                 runOuttake();
             }
-            loopTime.reset();
         }
 
     }
