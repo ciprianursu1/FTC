@@ -19,6 +19,8 @@ import com.qualcomm.robotcore.util.Range;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
+import java.util.Arrays;
+
 @TeleOp(name = "&TeleOpMainBlueClose")
 public class TeleOpStefan extends LinearOpMode {
 
@@ -37,6 +39,10 @@ public class TeleOpStefan extends LinearOpMode {
 
     int[] slots = new int[3];
     int[] totem = {2, 1, 2};
+    int totemIdx = 0;
+    int nextOuttakeSlot = -1;
+    int lastOuttakeSlot = 0;
+    boolean enabledSorting = false;
 
     // Color tracking
     int Color1 = 0;
@@ -76,7 +82,7 @@ public class TeleOpStefan extends LinearOpMode {
     final double ejectorDown = 0.2;
     final double ejectorUp = 0.02;
     double t_intake = 0;
-    final double[] slotPositionsIntake = {0,0.19,0.38,0.085};
+    final double[] slotPositionsIntake = {0,0.19,0.38};
     PinpointLocalizer pinpoint;
     Pose pose;
     double CoordX, CoordY, header;
@@ -212,7 +218,7 @@ public class TeleOpStefan extends LinearOpMode {
         double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
 
         if (d <= 0) {
-            flywheelTargetRPM = 3000;
+            flywheelTargetRPM = 2000;
             trajectoryAngle = maxTrajectoryAngle;
             return;
         }
@@ -530,8 +536,6 @@ public class TeleOpStefan extends LinearOpMode {
 
 
     private void servoLogic() {
-        if (gamepad1.touchpadWasPressed())
-            Posspinner = 0;
         //0.19=60 de grade
         if (gamepad1.dpadRightWasPressed()) {
             slotIntakeIndex++;
@@ -546,8 +550,14 @@ public class TeleOpStefan extends LinearOpMode {
     }
 
     private boolean spinnerFull() {
-        return detectedBalls == 3;
+        // Count how many non-zero slots we have
+        int count = 0;
+        for (int slot : logicalSlots) {
+            if (slot != 0) count++;
+        }
+        return count >= 3;
     }
+
 
     private double getFlywheelRPM() {
         return flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
@@ -654,6 +664,14 @@ public class TeleOpStefan extends LinearOpMode {
             return;
         }
 
+        // Check if spinner is full before accepting more balls
+        if (spinnerFull()) {
+            intakeMode = false;
+            spinIntake = false;
+            intake.setPower(0);
+            return;
+        }
+
         // Intake-facing sensor (change if needed)
         int intakeColor = processIntakeSensor(colorsensorSLot1);
 
@@ -670,12 +688,12 @@ public class TeleOpStefan extends LinearOpMode {
 
         if (colorPending && (System.currentTimeMillis() - colorStartTimeMs >= DETECT_DELAY_MS)) {
 
-            logicalSlots[0] = intakeColor;
-            rotateLogicalSlotsRight();
+            // Store the color in the current slot position (FIXED SLOTS - NO ROTATION)
+            logicalSlots[slotIntakeIndex] = intakeColor;
 
             // Advance servo one step
             slotIntakeIndex++;
-            slotIntakeIndex = slotIntakeIndex % 4;
+            slotIntakeIndex = slotIntakeIndex % 3;
             Posspinner = slotPositionsIntake[slotIntakeIndex];
 
             waitingForClear = true;
@@ -686,7 +704,6 @@ public class TeleOpStefan extends LinearOpMode {
             colorPending = false;
         }
     }
-
     private void resetLocalization(){
         pinpoint.setPose(startPose);
     }
@@ -734,13 +751,10 @@ public class TeleOpStefan extends LinearOpMode {
     }
 
     private void runIntake(){
-        t_intake = intakeTimeout.milliseconds();
-        if(t_intake >= prev_t_intake) {
             updateCulori();
             if(!launchPrepActive){
                 colorDrivenSpinnerLogicServos();
             }
-        }
 
 
     }
@@ -800,7 +814,7 @@ public class TeleOpStefan extends LinearOpMode {
 //    }
     private void runOuttake() {
         // keep feeding while shooting
-        intake.setPower(1);
+        spinIntake = true;
 
         long now = System.currentTimeMillis();
         long dt = now - stepStartMs;
@@ -808,29 +822,42 @@ public class TeleOpStefan extends LinearOpMode {
         switch (outtakeStep) {
 
             case 0:
-                // snapshot inventory once
-                slots[0] = logicalSlots[0];
-                slots[1] = logicalSlots[1];
-                slots[2] = logicalSlots[2];
-
-                // clear logical so intake recounts after
-                logicalSlots[0] = 0;
-                logicalSlots[1] = 0;
-                logicalSlots[2] = 0;
+                // Map logical slots to physical outtake slots
+                mapIntakeToOuttakeSlots();
 
                 Color1 = 0;
                 Color2 = 0;
                 Color3 = 0;
+                Arrays.fill(logicalSlots, 0);
 
-                // start at launch position
-                Posspinner = 0.095;
+                // Select the first ball to shoot based on totem order
+                selectNextOuttakeSlot();
+
+                if (nextOuttakeSlot == -1) {
+                    // No balls to shoot, end immediately
+                    outtakeMode = false;
+                    intakeMode = true;
+                    spinIntake = true;
+                    slotIntakeIndex = 0;
+                    Posspinner = 0;
+                    launchPrepActive = false;
+                    resetIntakeGatingAndFilters();
+                    outtakeStep = 0;
+                    break;
+                }
+
+                // Position spinner to selected slot
+                Posspinner = getOuttakeSlotPosition(nextOuttakeSlot);
 
                 rpmInRangeSinceMs = 0;
                 startStep(1);
                 break;
 
             case 1:
-                if (dt >= OUTTAKE_INITIAL_DELAY_MS) startStep(2);
+                if (dt >=  OUTTAKE_SPINNER_MOVE_MS*Math.abs(nextOuttakeSlot - lastOuttakeSlot)) {
+                    lastOuttakeSlot = nextOuttakeSlot;
+                    startStep(2);
+                }
                 break;
 
             case 2:
@@ -850,14 +877,34 @@ public class TeleOpStefan extends LinearOpMode {
 
             case 4:
                 if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
-                    Posspinner = 0.285;
+                    // Select next ball to shoot
+                    selectNextOuttakeSlot();
+
+                    if (nextOuttakeSlot == -1) {
+                        // No more balls, end sequence
+                        Posspinner = 0;
+                        outtakeMode = false;
+                        intakeMode = true;
+                        spinIntake = true;
+                        slotIntakeIndex = 0;
+                        launchPrepActive = false;
+                        resetIntakeGatingAndFilters();
+                        outtakeStep = 0;
+                        stepStartMs = 0;
+                        rpmInRangeSinceMs = 0;
+                        break;
+                    }
+
+                    // Move to next selected slot
+                    Posspinner = getOuttakeSlotPosition(nextOuttakeSlot);
                     startStep(5);
                 }
                 break;
 
             case 5:
-                if (dt >= OUTTAKE_SPINNER_MOVE_MS) {
+                if (dt >=  OUTTAKE_SPINNER_MOVE_MS*Math.abs(nextOuttakeSlot - lastOuttakeSlot)) {
                     rpmInRangeSinceMs = 0;
+                    lastOuttakeSlot = nextOuttakeSlot;
                     startStep(6);
                 }
                 break;
@@ -879,13 +926,34 @@ public class TeleOpStefan extends LinearOpMode {
 
             case 8:
                 if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
-                    Posspinner = 0.475;
+                    // Select next ball to shoot
+                    selectNextOuttakeSlot();
+
+                    if (nextOuttakeSlot == -1) {
+                        // No more balls, end sequence
+                        Posspinner = 0;
+                        outtakeMode = false;
+                        intakeMode = true;
+                        spinIntake = true;
+                        intake.setPower(0);
+                        slotIntakeIndex = 0;
+                        launchPrepActive = false;
+                        resetIntakeGatingAndFilters();
+                        outtakeStep = 0;
+                        stepStartMs = 0;
+                        rpmInRangeSinceMs = 0;
+                        break;
+                    }
+
+                    // Move to next selected slot
+                    Posspinner = getOuttakeSlotPosition(nextOuttakeSlot);
                     startStep(9);
                 }
                 break;
 
             case 9:
-                if (dt >= OUTTAKE_SPINNER_MOVE_MS) {
+                if (dt >= OUTTAKE_SPINNER_MOVE_MS*Math.abs(nextOuttakeSlot - lastOuttakeSlot)) {
+                    lastOuttakeSlot = nextOuttakeSlot;
                     rpmInRangeSinceMs = 0;
                     startStep(10);
                 }
@@ -908,29 +976,59 @@ public class TeleOpStefan extends LinearOpMode {
 
             case 12:
                 if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
-
-                    // end
+                    // End sequence
                     Posspinner = 0;
-
                     outtakeMode = false;
-
-                    intakeMode = false;
-                    spinIntake = false;
+                    intakeMode = true;
+                    spinIntake = true;;
                     intake.setPower(0);
-
                     slotIntakeIndex = 0;
                     Posspinner = 0;
-
                     launchPrepActive = false;
                     resetIntakeGatingAndFilters();
-
-                    // reset shooter FSM
                     outtakeStep = 0;
                     stepStartMs = 0;
                     rpmInRangeSinceMs = 0;
                 }
                 break;
         }
+    }
+
+    // Helper function to get servo position for each outtake slot
+    private double getOuttakeSlotPosition(int slot) {
+        switch (slot) {
+            case 0: return 0.095;   // First slot
+            case 1: return 0.285;   // Second slot
+            case 2: return 0.475;   // Third slot
+            default: return 0.095;
+        }
+    }
+    private void selectNextOuttakeSlot() {
+        nextOuttakeSlot = -1;
+        if(enabledSorting) {
+            for (int i = 0; i < 3; i++) {
+                if (slots[i] == totem[totemIdx]) {
+                    nextOuttakeSlot = i;
+                    slots[i] = 0;
+                    break;
+                }
+            }
+            totemIdx = (totemIdx + 1) % totem.length;
+        }
+
+        // If no match, just take the next available ball
+            for (int i = 0; i < 3; i++) {
+                if (slots[i] != 0) {
+                    nextOuttakeSlot = i;
+                    slots[i] = 0;
+                    return;
+                }
+            }
+        }
+    private void mapIntakeToOuttakeSlots() {
+        slots[0] = logicalSlots[1];
+        slots[1] = logicalSlots[0];
+        slots[2] = logicalSlots[2];
     }
     private void resetIntakeGatingAndFilters() {
         waitingForClear = false;
@@ -939,7 +1037,7 @@ public class TeleOpStefan extends LinearOpMode {
         colorPending = false;
         lastStableIntakeColor = 0;
 
-        for (int i = 0; i < lastNIntake.length; i++) lastNIntake[i] = 0;
+        Arrays.fill(lastNIntake, 0);
         idxIntake = 0;
     }
 
@@ -960,8 +1058,8 @@ public class TeleOpStefan extends LinearOpMode {
 
         while (opModeIsActive()) {
             if (Posspinner >= PosspinnerMin && Posspinner <= PosspinnerMax) {
-                spinnerFar.setPosition(Posspinner -0.02);
-                spinnerCLose.setPosition(Posspinner -0.02);
+                spinnerFar.setPosition(Posspinner);
+                spinnerCLose.setPosition(Posspinner);
             }
 
             servoLogic();
@@ -989,10 +1087,11 @@ public class TeleOpStefan extends LinearOpMode {
             if(gamepad1.optionsWasPressed() && gamepad1.shareWasPressed()){
                 resetLocalization();
             }
+            if (gamepad1.touchpadWasPressed()){
+                enabledSorting = !enabledSorting;
+                gamepad1.rumbleBlips(enabledSorting ? 1 : 2);
+            }
             if (gamepad1.circleWasPressed()) {
-                intakeTimeout.reset();
-                prev_t_intake = 0;
-                intake.setPower(1);
                 intakeMode = true;
                 spinIntake = !spinIntake;
                 intake.setPower(spinIntake ? 1: 0);
@@ -1012,7 +1111,7 @@ public class TeleOpStefan extends LinearOpMode {
                 lastStableIntakeColor = 0;
 
                 // Reset intake filter memory (prevents stale votes)
-                for (int i = 0; i < lastNIntake.length; i++) lastNIntake[i] = 0;
+                Arrays.fill(lastNIntake, 0);
                 idxIntake = 0;
             }
 
@@ -1025,12 +1124,11 @@ public class TeleOpStefan extends LinearOpMode {
                 runIntake();
 
             }
-
-
             if (gamepad1.right_trigger > 0.8) {
                 if(!outtakeMode) {
                     outtakeTimeout.reset();
                     outtakeStep = 0;
+
                 }
                 outtakeMode = true;
                 intakeMode = false;
