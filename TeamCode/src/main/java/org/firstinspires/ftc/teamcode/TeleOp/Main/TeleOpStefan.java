@@ -751,10 +751,10 @@ public class TeleOpStefan extends LinearOpMode {
     }
 
     private void runIntake(){
-            updateCulori();
-            if(!launchPrepActive){
-                colorDrivenSpinnerLogicServos();
-            }
+        updateCulori();
+        if(!launchPrepActive){
+            colorDrivenSpinnerLogicServos();
+        }
 
 
     }
@@ -812,224 +812,358 @@ public class TeleOpStefan extends LinearOpMode {
 //            }
 //        }
 //    }
-    private void runOuttake() {
-        // keep feeding while shooting
-        spinIntake = true;
+//    private void runOuttake() {
+//        // keep feeding while shooting
+//        spinIntake = true;
+//
+//        long now = System.currentTimeMillis();
+//        long dt = now - stepStartMs;
+//
+//        switch (outtakeStep) {
+//
+//            case 0:
+//                // Map logical slots to physical outtake slots
+//                mapIntakeToOuttakeSlots();
+//
+//                Color1 = 0;
+//                Color2 = 0;
+//                Color3 = 0;
+//                Arrays.fill(logicalSlots, 0);
+//
+//                // Select the first ball to shoot based on totem order
+//                selectNextOuttakeSlot();
+//
+//                if (nextOuttakeSlot == -1) {
+//                    // No balls to shoot, end immediately
+//                    outtakeMode = false;
+//                    intakeMode = true;
+//                    spinIntake = true;
+//                    slotIntakeIndex = 0;
+//                    Posspinner = 0;
+//                    launchPrepActive = false;
+//                    resetIntakeGatingAndFilters();
+//                    outtakeStep = 0;
+//                    break;
+//                }
+//
+//                // Position spinner to selected slot
+//                Posspinner = getOuttakeSlotPosition(nextOuttakeSlot);
+//
+//                rpmInRangeSinceMs = 0;
+//                startStep(1);
+//                break;
+//
+//            case 1:
+//                if (dt >=  OUTTAKE_SPINNER_MOVE_MS*Math.abs(nextOuttakeSlot - lastOuttakeSlot)) {
+//                    lastOuttakeSlot = nextOuttakeSlot;
+//                    startStep(2);
+//                }
+//                break;
+//
+//            case 2:
+//                // SHOOT #1 only when rpm stable in range
+//                if (rpmInRangeStable()) {
+//                    ejector.setPosition(ejectorUp);
+//                    startStep(3);
+//                }
+//                break;
+//
+//            case 3:
+//                if (dt >= OUTTAKE_EJECTOR_UP_MS) {
+//                    ejector.setPosition(ejectorDown);
+//                    startStep(4);
+//                }
+//                break;
+//
+//            case 4:
+//                if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
+//                    // Select next ball to shoot
+//                    selectNextOuttakeSlot();
+//
+//                    if (nextOuttakeSlot == -1) {
+//                        // No more balls, end sequence
+//                        Posspinner = 0;
+//                        outtakeMode = false;
+//                        intakeMode = true;
+//                        spinIntake = true;
+//                        slotIntakeIndex = 0;
+//                        launchPrepActive = false;
+//                        resetIntakeGatingAndFilters();
+//                        outtakeStep = 0;
+//                        stepStartMs = 0;
+//                        rpmInRangeSinceMs = 0;
+//                        break;
+//                    }
+//
+//                    // Move to next selected slot
+//                    Posspinner = getOuttakeSlotPosition(nextOuttakeSlot);
+//                    startStep(5);
+//                }
+//                break;
+//
+//            case 5:
+//                if (dt >=  OUTTAKE_SPINNER_MOVE_MS*Math.abs(nextOuttakeSlot - lastOuttakeSlot)) {
+//                    rpmInRangeSinceMs = 0;
+//                    lastOuttakeSlot = nextOuttakeSlot;
+//                    startStep(6);
+//                }
+//                break;
+//
+//            case 6:
+//                // SHOOT #2
+//                if (rpmInRangeStable()) {
+//                    ejector.setPosition(ejectorUp);
+//                    startStep(7);
+//                }
+//                break;
+//
+//            case 7:
+//                if (dt >= OUTTAKE_EJECTOR_UP_MS) {
+//                    ejector.setPosition(ejectorDown);
+//                    startStep(8);
+//                }
+//                break;
+//
+//            case 8:
+//                if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
+//                    // Select next ball to shoot
+//                    selectNextOuttakeSlot();
+//
+//                    if (nextOuttakeSlot == -1) {
+//                        // No more balls, end sequence
+//                        Posspinner = 0;
+//                        outtakeMode = false;
+//                        intakeMode = true;
+//                        spinIntake = true;
+//                        intake.setPower(0);
+//                        slotIntakeIndex = 0;
+//                        launchPrepActive = false;
+//                        resetIntakeGatingAndFilters();
+//                        outtakeStep = 0;
+//                        stepStartMs = 0;
+//                        rpmInRangeSinceMs = 0;
+//                        break;
+//                    }
+//
+//                    // Move to next selected slot
+//                    Posspinner = getOuttakeSlotPosition(nextOuttakeSlot);
+//                    startStep(9);
+//                }
+//                break;
+//
+//            case 9:
+//                if (dt >= OUTTAKE_SPINNER_MOVE_MS*Math.abs(nextOuttakeSlot - lastOuttakeSlot)) {
+//                    lastOuttakeSlot = nextOuttakeSlot;
+//                    rpmInRangeSinceMs = 0;
+//                    startStep(10);
+//                }
+//                break;
+//
+//            case 10:
+//                // SHOOT #3
+//                if (rpmInRangeStable()) {
+//                    ejector.setPosition(ejectorUp);
+//                    startStep(11);
+//                }
+//                break;
+//
+//            case 11:
+//                if (dt >= OUTTAKE_EJECTOR_UP_MS) {
+//                    ejector.setPosition(ejectorDown);
+//                    startStep(12);
+//                }
+//                break;
+//
+//            case 12:
+//                if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
+//                    // End sequence
+//                    Posspinner = 0;
+//                    outtakeMode = false;
+//                    intakeMode = true;
+//                    spinIntake = true;;
+//                    intake.setPower(0);
+//                    slotIntakeIndex = 0;
+//                    Posspinner = 0;
+//                    launchPrepActive = false;
+//                    resetIntakeGatingAndFilters();
+//                    outtakeStep = 0;
+//                    stepStartMs = 0;
+//                    rpmInRangeSinceMs = 0;
+//                }
+//                break;
+//        }
+//    }
+//
+//    // Helper function to get servo position for each outtake slot
+//    private double getOuttakeSlotPosition(int slot) {
+//        switch (slot) {
+//            case 0: return 0.095;   // First slot
+//            case 1: return 0.285;   // Second slot
+//            case 2: return 0.475;   // Third slot
+//            default: return 0.095;
+//        }
+//    }
+//    private void selectNextOuttakeSlot() {
+//        nextOuttakeSlot = -1;
+//        if(enabledSorting) {
+//            for (int i = 0; i < 3; i++) {
+//                if (slots[i] == totem[totemIdx]) {
+//                    nextOuttakeSlot = i;
+//                    slots[i] = 0;
+//                    break;
+//                }
+//            }
+//            totemIdx = (totemIdx + 1) % totem.length;
+//        }
 
-        long now = System.currentTimeMillis();
-        long dt = now - stepStartMs;
+//        // If no match, just take the next available ball
+//        for (int i = 0; i < 3; i++) {
+//            if (slots[i] != 0) {
+//                nextOuttakeSlot = i;
+//                slots[i] = 0;
+//                return;
+//            }
+//        }
+//    }
+//    private void mapIntakeToOuttakeSlots() {
+//        slots[0] = logicalSlots[1];
+//        slots[1] = logicalSlots[0];
+//        slots[2] = logicalSlots[2];
+//    }
+private void runOuttake() {
+    // keep feeding while shooting
+    intake.setPower(1);
 
-        switch (outtakeStep) {
+    long now = System.currentTimeMillis();
+    long dt = now - stepStartMs;
 
-            case 0:
-                // Map logical slots to physical outtake slots
-                mapIntakeToOuttakeSlots();
+    switch (outtakeStep) {
 
-                Color1 = 0;
-                Color2 = 0;
-                Color3 = 0;
-                Arrays.fill(logicalSlots, 0);
+        case 0:
+            // snapshot inventory once
+            slots[0] = logicalSlots[0];
+            slots[1] = logicalSlots[1];
+            slots[2] = logicalSlots[2];
 
-                // Select the first ball to shoot based on totem order
-                selectNextOuttakeSlot();
+            // clear logical so intake recounts after
+            logicalSlots[0] = 0;
+            logicalSlots[1] = 0;
+            logicalSlots[2] = 0;
 
-                if (nextOuttakeSlot == -1) {
-                    // No balls to shoot, end immediately
-                    outtakeMode = false;
-                    intakeMode = true;
-                    spinIntake = true;
-                    slotIntakeIndex = 0;
-                    Posspinner = 0;
-                    launchPrepActive = false;
-                    resetIntakeGatingAndFilters();
-                    outtakeStep = 0;
-                    break;
-                }
+            Color1 = 0;
+            Color2 = 0;
+            Color3 = 0;
 
-                // Position spinner to selected slot
-                Posspinner = getOuttakeSlotPosition(nextOuttakeSlot);
+            // start at launch position
+            Posspinner = 0.095;
 
+            rpmInRangeSinceMs = 0;
+            startStep(1);
+            break;
+
+        case 1:
+            if (dt >= OUTTAKE_INITIAL_DELAY_MS) startStep(2);
+            break;
+
+        case 2:
+            // SHOOT #1 only when rpm stable in range
+            if (rpmInRangeStable()) {
+                ejector.setPosition(ejectorUp);
+                startStep(3);
+            }
+            break;
+
+        case 3:
+            if (dt >= OUTTAKE_EJECTOR_UP_MS) {
+                ejector.setPosition(ejectorDown);
+                startStep(4);
+            }
+            break;
+
+        case 4:
+            if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
+                Posspinner = 0.285;
+                startStep(5);
+            }
+            break;
+
+        case 5:
+            if (dt >= OUTTAKE_SPINNER_MOVE_MS) {
                 rpmInRangeSinceMs = 0;
-                startStep(1);
-                break;
-
-            case 1:
-                if (dt >=  OUTTAKE_SPINNER_MOVE_MS*Math.abs(nextOuttakeSlot - lastOuttakeSlot)) {
-                    lastOuttakeSlot = nextOuttakeSlot;
-                    startStep(2);
-                }
-                break;
-
-            case 2:
-                // SHOOT #1 only when rpm stable in range
-                if (rpmInRangeStable()) {
-                    ejector.setPosition(ejectorUp);
-                    startStep(3);
-                }
-                break;
-
-            case 3:
-                if (dt >= OUTTAKE_EJECTOR_UP_MS) {
-                    ejector.setPosition(ejectorDown);
-                    startStep(4);
-                }
-                break;
-
-            case 4:
-                if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
-                    // Select next ball to shoot
-                    selectNextOuttakeSlot();
-
-                    if (nextOuttakeSlot == -1) {
-                        // No more balls, end sequence
-                        Posspinner = 0;
-                        outtakeMode = false;
-                        intakeMode = true;
-                        spinIntake = true;
-                        slotIntakeIndex = 0;
-                        launchPrepActive = false;
-                        resetIntakeGatingAndFilters();
-                        outtakeStep = 0;
-                        stepStartMs = 0;
-                        rpmInRangeSinceMs = 0;
-                        break;
-                    }
-
-                    // Move to next selected slot
-                    Posspinner = getOuttakeSlotPosition(nextOuttakeSlot);
-                    startStep(5);
-                }
-                break;
-
-            case 5:
-                if (dt >=  OUTTAKE_SPINNER_MOVE_MS*Math.abs(nextOuttakeSlot - lastOuttakeSlot)) {
-                    rpmInRangeSinceMs = 0;
-                    lastOuttakeSlot = nextOuttakeSlot;
-                    startStep(6);
-                }
-                break;
-
-            case 6:
-                // SHOOT #2
-                if (rpmInRangeStable()) {
-                    ejector.setPosition(ejectorUp);
-                    startStep(7);
-                }
-                break;
-
-            case 7:
-                if (dt >= OUTTAKE_EJECTOR_UP_MS) {
-                    ejector.setPosition(ejectorDown);
-                    startStep(8);
-                }
-                break;
-
-            case 8:
-                if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
-                    // Select next ball to shoot
-                    selectNextOuttakeSlot();
-
-                    if (nextOuttakeSlot == -1) {
-                        // No more balls, end sequence
-                        Posspinner = 0;
-                        outtakeMode = false;
-                        intakeMode = true;
-                        spinIntake = true;
-                        intake.setPower(0);
-                        slotIntakeIndex = 0;
-                        launchPrepActive = false;
-                        resetIntakeGatingAndFilters();
-                        outtakeStep = 0;
-                        stepStartMs = 0;
-                        rpmInRangeSinceMs = 0;
-                        break;
-                    }
-
-                    // Move to next selected slot
-                    Posspinner = getOuttakeSlotPosition(nextOuttakeSlot);
-                    startStep(9);
-                }
-                break;
-
-            case 9:
-                if (dt >= OUTTAKE_SPINNER_MOVE_MS*Math.abs(nextOuttakeSlot - lastOuttakeSlot)) {
-                    lastOuttakeSlot = nextOuttakeSlot;
-                    rpmInRangeSinceMs = 0;
-                    startStep(10);
-                }
-                break;
-
-            case 10:
-                // SHOOT #3
-                if (rpmInRangeStable()) {
-                    ejector.setPosition(ejectorUp);
-                    startStep(11);
-                }
-                break;
-
-            case 11:
-                if (dt >= OUTTAKE_EJECTOR_UP_MS) {
-                    ejector.setPosition(ejectorDown);
-                    startStep(12);
-                }
-                break;
-
-            case 12:
-                if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
-                    // End sequence
-                    Posspinner = 0;
-                    outtakeMode = false;
-                    intakeMode = true;
-                    spinIntake = true;;
-                    intake.setPower(0);
-                    slotIntakeIndex = 0;
-                    Posspinner = 0;
-                    launchPrepActive = false;
-                    resetIntakeGatingAndFilters();
-                    outtakeStep = 0;
-                    stepStartMs = 0;
-                    rpmInRangeSinceMs = 0;
-                }
-                break;
-        }
-    }
-
-    // Helper function to get servo position for each outtake slot
-    private double getOuttakeSlotPosition(int slot) {
-        switch (slot) {
-            case 0: return 0.095;   // First slot
-            case 1: return 0.285;   // Second slot
-            case 2: return 0.475;   // Third slot
-            default: return 0.095;
-        }
-    }
-    private void selectNextOuttakeSlot() {
-        nextOuttakeSlot = -1;
-        if(enabledSorting) {
-            for (int i = 0; i < 3; i++) {
-                if (slots[i] == totem[totemIdx]) {
-                    nextOuttakeSlot = i;
-                    slots[i] = 0;
-                    break;
-                }
+                startStep(6);
             }
-            totemIdx = (totemIdx + 1) % totem.length;
-        }
+            break;
 
-        // If no match, just take the next available ball
-            for (int i = 0; i < 3; i++) {
-                if (slots[i] != 0) {
-                    nextOuttakeSlot = i;
-                    slots[i] = 0;
-                    return;
-                }
+        case 6:
+            // SHOOT #2
+            if (rpmInRangeStable()) {
+                ejector.setPosition(ejectorUp);
+                startStep(7);
             }
-        }
-    private void mapIntakeToOuttakeSlots() {
-        slots[0] = logicalSlots[1];
-        slots[1] = logicalSlots[0];
-        slots[2] = logicalSlots[2];
+            break;
+
+        case 7:
+            if (dt >= OUTTAKE_EJECTOR_UP_MS) {
+                ejector.setPosition(ejectorDown);
+                startStep(8);
+            }
+            break;
+
+        case 8:
+            if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
+                Posspinner = 0.475;
+                startStep(9);
+            }
+            break;
+
+        case 9:
+            if (dt >= OUTTAKE_SPINNER_MOVE_MS) {
+                rpmInRangeSinceMs = 0;
+                startStep(10);
+            }
+            break;
+
+        case 10:
+            // SHOOT #3
+            if (rpmInRangeStable()) {
+                ejector.setPosition(ejectorUp);
+                startStep(11);
+            }
+            break;
+
+        case 11:
+            if (dt >= OUTTAKE_EJECTOR_UP_MS) {
+                ejector.setPosition(ejectorDown);
+                startStep(12);
+            }
+            break;
+
+        case 12:
+            if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
+
+                // end
+                Posspinner = 0;
+
+                outtakeMode = false;
+
+                intakeMode = false;
+                spinIntake = false;
+                intake.setPower(0);
+
+                slotIntakeIndex = 0;
+                Posspinner = 0;
+
+                launchPrepActive = false;
+                resetIntakeGatingAndFilters();
+
+                // reset shooter FSM
+                outtakeStep = 0;
+                stepStartMs = 0;
+                rpmInRangeSinceMs = 0;
+            }
+            break;
     }
+}
     private void resetIntakeGatingAndFilters() {
         waitingForClear = false;
         detectionLocked = false;
