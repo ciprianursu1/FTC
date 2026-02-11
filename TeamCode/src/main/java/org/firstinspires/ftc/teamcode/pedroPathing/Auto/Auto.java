@@ -1,98 +1,228 @@
 package org.firstinspires.ftc.teamcode.pedroPathing.Auto;
 
-import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
-import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorEx;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.Servo;
-import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
-@Autonomous(name = "All Motors Fixed", group = "Test")
+import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+
+import com.pedropathing.follower.Follower;
+import com.pedropathing.paths.PathChain;
+import com.pedropathing.geometry.BezierLine;
+import com.pedropathing.geometry.Pose;
+
+@Autonomous(name = "AutoBlueFar_PATH_ONLY", group = "Test")
 public class Auto extends OpMode {
 
-    private ElapsedTime timer = new ElapsedTime();
-    private int state = 0;
+    Follower follower;
+    Paths paths;
 
-    DcMotorEx spinner;
-    DcMotor intake;
-    DcMotorEx tureta;
-    DcMotor flywheel;
-
-    DcMotor front_left;
-    DcMotor front_right;
-    DcMotor back_left;
-    DcMotor back_right;
-
-    Servo ejector;
-
-    static final double TICKS_PER_REV = 384.5;
+    int stage = 0;
+    boolean pathStarted = false;
 
     @Override
     public void init() {
+        follower = Constants.createFollower(hardwareMap);
 
-        front_left  = hardwareMap.dcMotor.get("lf");
-        front_right = hardwareMap.dcMotor.get("rf");
-        back_left   = hardwareMap.dcMotor.get("lr");
-        back_right  = hardwareMap.dcMotor.get("rr");
+        // Matches Path9 start
+        follower.setStartingPose(new Pose(57, 9, Math.toRadians(90)));
 
-        front_right.setDirection(DcMotorSimple.Direction.FORWARD);
-        back_right.setDirection(DcMotorSimple.Direction.FORWARD);
-        front_left.setDirection(DcMotorSimple.Direction.REVERSE);
-        back_left.setDirection(DcMotorSimple.Direction.REVERSE);
+        paths = new Paths(follower);
 
-        spinner  = hardwareMap.get(DcMotorEx.class, "spinner");
-        intake   = hardwareMap.get(DcMotor.class, "intake");
-        tureta   = hardwareMap.get(DcMotorEx.class, "tureta");
-        flywheel = hardwareMap.get(DcMotor.class, "flywheel");
-        ejector  = hardwareMap.get(Servo.class, "ejector");
-
-        spinner.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        spinner.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        spinner.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-    }
-
-    @Override
-    public void start() {
-        state = 0;
-        timer.reset();
+        stage = 0;
+        pathStarted = false;
     }
 
     @Override
     public void loop() {
 
-        switch (state) {
+        follower.update();
 
-            case 0: // WAIT 29 SECONDS
-                if (timer.seconds() >= 29.0) {
-                    timer.reset();
-                    state = 1;
+        switch (stage) {
+
+            case 0:
+                stage = 1;
+                break;
+
+            case 1:
+                if (!pathStarted) {
+                    follower.followPath(paths.Path9, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 2;
                 }
                 break;
 
-            case 1: // DRIVE FORWARD
-                setDrivePower(0.4);
+            case 2:
+                if (!pathStarted) {
+                    follower.followPath(paths.Path3, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 3;
+                }
+                break;
+
+            case 3:
+                if (!pathStarted) {
+                    follower.followPath(paths.Path1, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 4;
+                }
+                break;
+
+            case 4:
+                if (!pathStarted) {
+                    follower.followPath(paths.Path2, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 5;
+                }
+                break;
+
+            case 5:
+                if (!pathStarted) {
+                    follower.followPath(paths.Path4, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 6;
+                }
+                break;
+
+            case 6:
+                if (!pathStarted) {
+                    follower.followPath(paths.Path5, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 7;
+                }
+                break;
+
+            case 7:
+                if (!pathStarted) {
+                    follower.followPath(paths.Path6, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 8;
+                }
+                break;
+
+            case 8:
+                if (!pathStarted) {
+                    follower.followPath(paths.Path7, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 9;
+                }
+                break;
+
+            case 9:
+                if (!pathStarted) {
+                    follower.followPath(paths.Path8, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    stage = 10;
+                }
+                break;
+
+            case 10:
+                requestOpModeStop();
                 break;
         }
-
-        telemetry.addData("State", state);
-        telemetry.addData("Time", timer.seconds());
-        telemetry.update();
     }
 
-    private void setDrivePower(double power) {
-        front_left.setPower(power);
-        front_right.setPower(power);
-        back_left.setPower(power);
-        back_right.setPower(power);
-    }
+    public static class Paths {
 
-    @Override
-    public void stop() {
-        setDrivePower(0);
-        spinner.setPower(0);
-        intake.setPower(0);
-        tureta.setPower(0);
-        flywheel.setPower(0);
+        public PathChain Path9;
+        public PathChain Path3;
+        public PathChain Path1;
+        public PathChain Path2;
+        public PathChain Path4;
+        public PathChain Path5;
+        public PathChain Path6;
+        public PathChain Path7;
+        public PathChain Path8;
+
+        public Paths(Follower follower) {
+
+            Path9 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(57.000, 9.000),
+                            new Pose(57.000, 12.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(90))
+                    .build();
+
+            Path3 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(57.000, 12.000),
+                            new Pose(57.000, 21.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(299))
+                    .build();
+
+            Path1 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(57.000, 21.000),
+                            new Pose(42.000, 36.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(180))
+                    .build();
+
+            Path2 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(42.000, 36.000),
+                            new Pose(9.000, 36.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
+                    .build();
+
+            Path4 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(9.000, 36.000),
+                            new Pose(57.000, 21.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(299))
+                    .build();
+
+            Path5 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(57.000, 21.000),
+                            new Pose(12.000, 21.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(200))
+                    .build();
+
+            Path6 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(12.000, 21.000),
+                            new Pose(12.000, 12.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(200), Math.toRadians(200))
+                    .build();
+
+            Path7 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(12.000, 12.000),
+                            new Pose(57.000, 21.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(200), Math.toRadians(299))
+                    .build();
+
+            Path8 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(57.000, 21.000),
+                            new Pose(39.000, 12.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(180))
+                    .build();
+        }
     }
 }

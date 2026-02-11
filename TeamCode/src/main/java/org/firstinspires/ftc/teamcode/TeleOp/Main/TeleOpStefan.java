@@ -342,7 +342,7 @@ public class TeleOpStefan extends LinearOpMode {
     }
     private void initLocalization() {
         pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
-        startPose = new Pose(63.5, 8, Math.toRadians(90));
+        startPose = new Pose(64.3, 15.74/2.0, Math.toRadians(90));
         pinpoint.setStartPose(startPose);
     }
 
@@ -740,8 +740,8 @@ public class TeleOpStefan extends LinearOpMode {
             telemetry.addData("Power", "%.2f", power);
             telemetry.addData("Flywheel Target RPM", flywheelTargetRPM);
             telemetry.addData("Flywheel RPM", getFlywheelRPM());
-            telemetry.addData("X", "%.1f", pX);
-            telemetry.addData("Y", "%.1f", pY);
+            telemetry.addData("X", "%.1f", pose.getX());
+            telemetry.addData("Y", "%.1f", pose.getY());
             telemetry.addData("Heading", "%.1f",
                     Math.toDegrees(pose.getHeading()));
             telemetry.addData("trajectoryAngle",trajectoryAngle);
