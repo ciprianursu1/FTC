@@ -144,7 +144,7 @@ public class Auto extends OpMode {
     private int outtakeStep = 0;
     private long stepStartMs = 0;
 
-    private static final double RPM_TOL = 120.0;
+    private static final double RPM_TOL = 300.0;
     private static final long RPM_STABLE_MS = 60;   // 40–80ms is fine in auto
 
     private static final double RPM_TOL_LOW  = 160.0;  // allow underspeed more
@@ -183,8 +183,16 @@ public class Auto extends OpMode {
     }
 
     private boolean rpmInRangeStable() {
-        // Time-driven shooting: ignore RPM entirely
-        return true;
+        double target = TARGET_RPM; // in launch position we compute it; else it gets set to baseline
+        boolean inRange = (rpm >= (target - RPM_TOL)) && (rpm <= (target + RPM_TOL));
+        long now = System.currentTimeMillis();
+
+        if (!inRange) {
+            rpmInRangeSinceMs = 0;
+            return false;
+        }
+        if (rpmInRangeSinceMs == 0) rpmInRangeSinceMs = now;
+        return (now - rpmInRangeSinceMs) >= RPM_STABLE_MS;
     }
 
     private void startStep(int newStep) {
