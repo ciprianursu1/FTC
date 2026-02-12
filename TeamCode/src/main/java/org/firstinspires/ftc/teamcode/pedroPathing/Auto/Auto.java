@@ -62,7 +62,7 @@ public class Auto extends OpMode {
     static final double FLYWHEEL_TICKS_PER_REV = 28.0;
 
     // imported from TeleOp shooter
-    public static double TARGET_RPM = 3200.0;
+    public static double TARGET_RPM = 3150.0;
 
     // Start aggressive; tune after you get fast spin-up
     public static double kP_v = 25.0;     // try 20–35
@@ -183,31 +183,19 @@ public class Auto extends OpMode {
     }
 
     private boolean rpmInRangeStable() {
-        // shoot once we’re above 95% target for at least 40ms
-        final double FRAC = 0.95;
-        final long STABLE = 40;
-
-        boolean inRange = rpm >= (TARGET_RPM * FRAC);
-        long now = System.currentTimeMillis();
-
-        if (!inRange) {
-            rpmInRangeSinceMs = 0;
-            return false;
-        }
-        if (rpmInRangeSinceMs == 0) rpmInRangeSinceMs = now;
-        return (now - rpmInRangeSinceMs) >= STABLE;
+        // Time-driven shooting: ignore RPM entirely
+        return true;
     }
-
 
     private void startStep(int newStep) {
         outtakeStep = newStep;
         stepStartMs = System.currentTimeMillis();
     }
 
-    private static final long OUTTAKE_INITIAL_DELAY_MS = 50;
-    private static final long OUTTAKE_EJECTOR_UP_MS = 300;
+    private static final long OUTTAKE_INITIAL_DELAY_MS = 200;
+    private static final long OUTTAKE_EJECTOR_UP_MS = 250;
     private static final long OUTTAKE_EJECTOR_DOWN_MS = 170;
-    private static final long OUTTAKE_SPINNER_MOVE_MS = 300;
+    private static final long OUTTAKE_SPINNER_MOVE_MS = 200;
 
     // latch so shoot stages BLOCK until outtakeMode finishes
     private boolean shootStageStarted = false;
@@ -920,6 +908,13 @@ public class Auto extends OpMode {
 
     private void colorDrivenSpinnerLogicServos() {
         if (spinnerMoving) {
+            // Spinner should not move without intake pulling (friction reducer / ball seating)
+            if (!outtakeMode) {
+                intakeMode = true;
+                spinIntake = true;
+                intake.setPower(1.0);
+            }
+
             if (System.currentTimeMillis() - servoMoveStartMs >= SERVO_MOVE_LOCK_MS) {
                 spinnerMoving = false;
                 detectionLocked = false;
@@ -928,6 +923,8 @@ public class Auto extends OpMode {
                 return;
             }
         }
+
+
 
         if (waitingForClear) {
             int intakeColorNow = processIntakeSensor(colorsensorSLot1);
