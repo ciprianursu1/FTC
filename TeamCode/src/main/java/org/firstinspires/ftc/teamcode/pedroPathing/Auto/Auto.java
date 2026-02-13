@@ -149,14 +149,6 @@ public class Auto extends OpMode {
     private long rpmInRangeSinceMs = 0;
     private Pose robotPose;
 
-    /* ===================== FLYWHEEL KICK START ===================== */
-
-    // FASTEST POSSIBLE SPINUP: open-loop full power "kick" then switch to velocity PID
-    public static double KICK_TIME = 2.00;   // heavy flywheel: start 0.7–1.0s
-    public static double HANDOFF_FRAC = 1.0; // handoff at 80% of TARGET_RPM (0.75–0.85)
-
-    private boolean kickActive = true;
-    private final ElapsedTime kickTimer = new ElapsedTime();
 
     private void abortOuttakeNow() {
         // put everything in a safe state and stop the shooter FSM
@@ -240,11 +232,6 @@ public class Auto extends OpMode {
         tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         batteryVoltage = hardwareMap.voltageSensor.iterator().next();
-
-
-        kickActive = true;
-        kickTimer.reset();
-
 
         // you had REVERSE in your code
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
@@ -630,6 +617,7 @@ public class Auto extends OpMode {
     }
 
     /* ===================== FLYWHEEL ===================== */
+    /* ===================== FLYWHEEL ===================== */
     private void updateFlywheel() {
         // Measure RPM
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
@@ -639,35 +627,41 @@ public class Auto extends OpMode {
         if (v < 1.0) v = 12.0; // safety
         double kF_comp = kF_v * (12.0 / v);
 
-        // ===== PHASE 1: OPEN-LOOP KICK (fastest acceleration possible) =====
-        if (kickActive) {
-            boolean timeDone = kickTimer.seconds() >= KICK_TIME;
-            boolean rpmDone  = rpm >= (TARGET_RPM * HANDOFF_FRAC);
+        double target = TARGET_RPM;
 
-            if (timeDone || rpmDone) {
-                kickActive = false;
-                flywheel.setPower(0);
-                // fall through to velocity mode below
-            } else {
-                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-                flywheel.setPower(1.0);
-                return;
+        // Convert target to ticks/sec for RUN_USING_ENCODER velocity
+        targetTPS = target * FLYWHEEL_TICKS_PER_REV / 60.0;
+
+        // === Control policy ===
+        // In-band (±100rpm): PID velocity hold
+        // Below band: full power 1.0
+        // Above band: power 0.0
+        if (Math.abs(rpm - target) <= RPM_TOL) {
+            // PID HOLD
+            if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
+                flywheel.setPower(0); // clear any open-loop command
+                flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
             }
+            flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_comp);
+            flywheel.setVelocity(targetTPS);
+        } else if (rpm < (target - RPM_TOL)) {
+            // KICK UP FAST
+            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
+                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            }
+            flywheel.setPower(1.0);
+        } else {
+            // TOO FAST -> CUT POWER
+            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
+                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            }
+            flywheel.setPower(0.0);
         }
 
-        // ===== PHASE 2: CLOSED-LOOP VELOCITY HOLD =====
-        if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
-            flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        }
-
-        flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_comp);
-
-        targetTPS = TARGET_RPM * FLYWHEEL_TICKS_PER_REV / 60.0;
-        flywheel.setVelocity(targetTPS);
-
-        // refresh rpm after command
+        // Refresh rpm after command (optional but nice for telemetry stability)
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
     }
+
 
 
 
