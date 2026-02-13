@@ -19,8 +19,8 @@ import com.qualcomm.robotcore.util.Range;
 
 import java.util.Arrays;
 
-@Autonomous(name = "auto9BlueFar", group = "Test")
-public class Auto extends OpMode {
+@Autonomous(name = "auto9BlueFarDTest", group = "Test")
+public class Auto_D extends OpMode {
 
     /* ===================== TELEMETRY ===================== */
     private TelemetryManager panelsTelemetry;
@@ -65,11 +65,12 @@ public class Auto extends OpMode {
     static final double FLYWHEEL_TICKS_PER_REV = 28.0;
 
     // imported from TeleOp shooter
-    public static double TARGET_RPM = 2940 ;
+    public static double TARGET_RPM = 2950 ;
+
     // Start aggressive; tune after you get fast spin-up
-    public static double kP_v = 30.0;     // try 20–35
+    public static double kP_v = 30;     // try 20–35
     public static double kI_v = 0.0;      // keep 0 for fastest transient
-    public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
+    public static double kD_v = 0.5;      // add small later only if it overshoots/oscillates
 
     // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
     public static double kF_v = 14.0;     // try 12.0–14.0
@@ -142,12 +143,11 @@ public class Auto extends OpMode {
     // Control
     private static final double kP = 0.015;
     private static final double MAX_POWER_TURETA = 0.4;
-    double targetX = 5;
+    double targetX = 0;
     double targetY = 144;
     double turretX = 0.0;
     double turretY = 0.0;
-    private static final double TURRET_TOL_DEG = 2.0;   // allowed error
-    private boolean turretOnTarget = false;
+
     boolean detectionLocked = false;
     boolean waitingForClear = false;
     boolean spinnerMoving = false;
@@ -203,7 +203,6 @@ public class Auto extends OpMode {
         }
 
         double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
-        turretOnTarget = Math.abs(error) <= TURRET_TOL_DEG;
 
         double power = error * kP;
         power = Range.clip(power, -MAX_POWER_TURETA, MAX_POWER_TURETA);
@@ -236,6 +235,7 @@ public class Auto extends OpMode {
         double target = TARGET_RPM; // in launch position we compute it; else it gets set to baseline
         boolean inRange = (rpm >= (target - RPM_TOL)) && (rpm <= (target + RPM_TOL));
         long now = System.currentTimeMillis();
+
         if (!inRange) {
             rpmInRangeSinceMs = 0;
             return false;
@@ -414,7 +414,7 @@ public class Auto extends OpMode {
 
         Pose robotPose = follower.getPose();
 
-        double remain = AUTO_TOTAL_S - autoDelay.seconds();
+        double remain = AUTO_TOTAL_S - getRuntime();
         if (remain <= PARK_IF_REMAIN_S && stage < 11) {
             // force park ASAP
             abortOuttakeNow();
@@ -520,7 +520,6 @@ public class Auto extends OpMode {
                     stage = 5;
                 }
                 break;
-
             // ================== RETURN TO SHOOT ==================
             case 5:
                 if (outtakeMode) break;
@@ -596,9 +595,28 @@ public class Auto extends OpMode {
                     stage = 9;
                 }
                 break;
+            // ================== ROTATE ==================
+            case 9:
+                if (outtakeMode) break;
+                aimingEnabled = true;
+                intakeMode = true;
+                spinIntake = true;
+                intake.setPower(-1);
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path10, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    waiting = false;
+                    shootStageStarted = false;
+                    stage = 10;
+                }
+                break;
 
             // ================== RETURN AGAIN ==================
-            case 9:
+            case 10:
                 if (outtakeMode) break;
                 aimingEnabled = true;
                 intakeMode = true;
@@ -613,12 +631,11 @@ public class Auto extends OpMode {
                     pathStarted = false;
                     waiting = false;
                     shootStageStarted = false;
-                    stage = 10;
+                    stage = 11;
                 }
                 break;
-
             // ================== FINAL SHOOT ==================
-            case 10:
+            case 11:
                 aimingEnabled = true;
                 if (!shootStageStarted) {
                     if (delayDone()) {
@@ -629,24 +646,24 @@ public class Auto extends OpMode {
                     if (!outtakeMode) {
                         shootStageStarted = false;
                         waiting = false;
-                        stage = 11;
+                        stage = 12;
                     }
                 }
                 break;
 
             // ================== PARK ==================
-            case 11:
+            case 12:
                 aimingEnabled = false;
                 if (!pathStarted) {
                     follower.followPath(paths.Path8, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
-                    stage = 12;
+                    stage = 13;
                 }
                 break;
 
-            case 12:
+            case 13:
                 requestOpModeStop();
                 break;
         }
@@ -658,21 +675,21 @@ public class Auto extends OpMode {
         }
 
         // ===================== TELEMETRY =====================
-//        panelsTelemetry.debug("Robot X", robotPose.getX());
-//        panelsTelemetry.debug("Robot Y", robotPose.getY());
-//        panelsTelemetry.debug("Robot Heading (deg)", Math.toDegrees(robotPose.getHeading()));
-//
-//
-//        panelsTelemetry.debug("Auto Stage", stage);
-//        panelsTelemetry.debug("Path Started", pathStarted);
-//        panelsTelemetry.debug("Follower Busy", follower.isBusy());
-//
-//        panelsTelemetry.debug("Flywheel RPM", rpm);
-//        panelsTelemetry.debug("Flywheel Target", TARGET_RPM);
-//        panelsTelemetry.debug("rpmStable", rpmInRangeStable());
-//
-//
-//        panelsTelemetry.update(telemetry);
+        panelsTelemetry.debug("Robot X", robotPose.getX());
+        panelsTelemetry.debug("Robot Y", robotPose.getY());
+        panelsTelemetry.debug("Robot Heading (deg)", Math.toDegrees(robotPose.getHeading()));
+
+
+        panelsTelemetry.debug("Auto Stage", stage);
+        panelsTelemetry.debug("Path Started", pathStarted);
+        panelsTelemetry.debug("Follower Busy", follower.isBusy());
+
+        panelsTelemetry.debug("Flywheel RPM", rpm);
+        panelsTelemetry.debug("Flywheel Target", TARGET_RPM);
+        panelsTelemetry.debug("rpmStable", rpmInRangeStable());
+
+
+        panelsTelemetry.update(telemetry);
     }
 
     /* ===================== START OUTTAKE ===================== */
@@ -694,7 +711,6 @@ public class Auto extends OpMode {
 
     }
 
-    /* ===================== FLYWHEEL ===================== */
     /* ===================== FLYWHEEL ===================== */
     private void updateFlywheel() {
         // Measure RPM
@@ -781,7 +797,7 @@ public class Auto extends OpMode {
 
             case 2:
                 // SHOOT #1 only when rpm stable in range
-                if (rpmInRangeStable() && turretOnTarget) {
+                if (rpmInRangeStable()) {
                     ejector.setPosition(ejectorUp);
                     startStep(3);
                 }
@@ -810,7 +826,7 @@ public class Auto extends OpMode {
 
             case 6:
                 // SHOOT #2
-                if (rpmInRangeStable() && turretOnTarget) {
+                if (rpmInRangeStable()) {
                     ejector.setPosition(ejectorUp);
                     startStep(7);
                 }
@@ -839,7 +855,7 @@ public class Auto extends OpMode {
 
             case 10:
                 // SHOOT #3
-                if (rpmInRangeStable() && turretOnTarget) {
+                if (rpmInRangeStable()) {
                     ejector.setPosition(ejectorUp);
                     startStep(11);
                 }
@@ -898,43 +914,22 @@ public class Auto extends OpMode {
     }
 
     private int smekerie1(ColorSensor colorSensor) {
-
         int r = colorSensor.red();
         int g = colorSensor.green();
         int b = colorSensor.blue();
         int alpha = colorSensor.alpha();
         double h = getHue(r, g, b);
-
         int detected;
 
-        // ---- NOTHING / LOW LIGHT ----
-        if (alpha < 90 && inRange(h, 140, 155)) {
-            detected = 0;
-        }
-
-        // ---- COLOR 2 (HIGH HUE / PURPLE AREA) ----
-        else if (h > 210 || (alpha < 100 && inRange(h, 155, 185))) {
-            detected = 2;
-        }
-
-        // ---- COLOR 1 (GREENISH AREA) ----
-        else if (inRange(h, 135, 160) && alpha > 90) {
-            detected = 1;
-        }
-
-        // ---- COLOR 2 SPECIFIC BAND ----
-        else if (inRange(h, 195, 230) && alpha < 110) {
-            detected = 2;
-        }
-
-        else {
-            detected = 0;
-        }
+        if (alpha < 100 && (h == 150 || h == 144)) detected = 0;
+        else if ((h > 215) || (alpha < 100 && (h == 160 || h == 180))) detected = 2;
+        else if (h > 135 && h < 160 && alpha > 100) detected = 1;
+        else if ((h == 140 || h == 145) && alpha == 43) detected = 0;
+        else if (h > 135 && h < 160 && alpha > 60) detected = 1;
+        else if ((h == 210 || h == 220 || h == 225 || h == 200) && alpha < 100) detected = 2;
+        else detected = 0;
 
         return detected;
-    }
-    private boolean inRange(double value, double min, double max) {
-        return value >= min && value <= max;
     }
 
     private int CuloareFinala1(ColorSensor sensor, int[] last5, int index) {
@@ -1088,18 +1083,19 @@ public class Auto extends OpMode {
         public PathChain Path6;
         public PathChain Path7;
         public PathChain Path8;
+        public PathChain Path10;
 
         public Paths(Follower follower) {
             Path0 = follower.pathBuilder()
                     .addPath(new BezierLine(new Pose(56, 8), new Pose(61.836, 26.8194)))
-                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(293))
+                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(291.5))
                     .build();
 
             Path9 = follower.pathBuilder()
                     .addPath(new BezierLine(
                             new Pose(57.000, 9.000),
                             new Pose(57.000, 12.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(293), Math.toRadians(293))
+                    .setLinearHeadingInterpolation(Math.toRadians(291.5), Math.toRadians(291.5))
                     .build();
 
             Path3 = follower.pathBuilder()
@@ -1112,20 +1108,20 @@ public class Auto extends OpMode {
             Path1 = follower.pathBuilder()
                     .addPath(new BezierLine(
                             new Pose(57.000, 21.000),
-                            new Pose(47.000, 33.000)))
+                            new Pose(47.000, 36.000)))
                     .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(180))
                     .build();
 
             Path2 = follower.pathBuilder()
                     .addPath(new BezierLine(
-                            new Pose(42.000, 33.000),
-                            new Pose(9.000, 33.000)))
+                            new Pose(42.000, 36.000),
+                            new Pose(9.000, 36.000)))
                     .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
                     .build();
 
             Path4 = follower.pathBuilder()
                     .addPath(new BezierLine(
-                            new Pose(9.000, 33.000),
+                            new Pose(9.000, 36.000),
                             new Pose(57.000, 21.000)))
                     .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(299))
                     .build();
@@ -1146,9 +1142,9 @@ public class Auto extends OpMode {
 
             Path7 = follower.pathBuilder()
                     .addPath(new BezierLine(
-                            new Pose(12.000, 12.000),
+                            new Pose(8.000, 8.000),
                             new Pose(57.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(200), Math.toRadians(299))
+                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(299))
                     .build();
 
             Path8 = follower.pathBuilder()
@@ -1156,6 +1152,12 @@ public class Auto extends OpMode {
                             new Pose(57.000, 21.000),
                             new Pose(39.000, 12.000)))
                     .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(180))
+                    .build();
+            Path10 = follower.pathBuilder()
+                    .addPath(new BezierLine(
+                            new Pose(12.000, 21.000),
+                            new Pose(10.000, 10.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(200), Math.toRadians(180))
                     .build();
         }
     }

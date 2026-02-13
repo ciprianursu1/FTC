@@ -80,7 +80,7 @@ public class TeleOpStefan extends LinearOpMode {
     boolean outtakeMode = false;
     private ElapsedTime outtakeTimeout = new ElapsedTime();
     private ElapsedTime intakeTimeout = new ElapsedTime();
-    final double ejectorDown = 0.2;
+    final double ejectorDown = 0.255;
     final double ejectorUp = 0.02;
     double t_intake = 0;
     final double[] slotPositionsIntake = {0,0.19,0.38};
