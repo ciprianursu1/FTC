@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.pedroPathing.Auto;
 
+import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.hardware.*;
@@ -26,6 +27,14 @@ public class Auto extends OpMode {
     private int pathState = 0;
     private boolean pathStarted = false;
     private Paths paths;
+    private Pose pose;
+    double turretX = 0.0;
+    double turretY = 0.0;
+    double turretOffsetX = 0.0;
+    double turretOffsetY = 0.0;
+    double targetX = 0;
+    double targetY = 144;
+
 
     /* ===================== AUTONOMOUS STAGE ===================== */
     int stage = 0;
@@ -65,12 +74,12 @@ public class Auto extends OpMode {
     public static double TARGET_RPM = 3150.0;
 
     // Start aggressive; tune after you get fast spin-up
-    public static double kP_v = 25.0;     // try 20–35
+    public static double kP_v = 30;     // try 20–35
     public static double kI_v = 0.0;      // keep 0 for fastest transient
     public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
 
     // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
-    public static double kF_v = 12.5;     // try 12.0–14.0
+    public static double kF_v = 14.0;     // try 12.0–14.0
 
     private double targetTPS;
     private double rpm = 0.0;
@@ -79,6 +88,10 @@ public class Auto extends OpMode {
     private static final double INTAKE_PASS2_SPEED = 0.35;   // case 8 (was 1.0)
     private static final double AUTO_TOTAL_S = 30.0;
     private static final double PARK_IF_REMAIN_S = 2.0;
+    private static final double LEFT_LIMIT = -110;
+    private static final double RIGHT_LIMIT = 110;
+    private static final double MAX_POWER_TURETA = 0.4;
+
 
 
 
@@ -143,19 +156,26 @@ public class Auto extends OpMode {
 
     private int outtakeStep = 0;
     private long stepStartMs = 0;
+    double startTurretAngle = -180.0;
+    private static final double MOTOR_TICKS_PER_REV = 384.5;
+    private static final double MOTOR_TO_TURRET_RATIO = 75.0 / 26.0;
 
+    private static final double DEG_PER_TICK_TURETA =
+            360.0 / (MOTOR_TICKS_PER_REV * MOTOR_TO_TURRET_RATIO);
+    boolean aimingEnabled = true;
     private static final double RPM_TOL = 300.0;
     private static final long RPM_STABLE_MS = 60;   // 40–80ms is fine in auto
 
     private static final double RPM_TOL_LOW  = 160.0;  // allow underspeed more
     private static final double RPM_TOL_HIGH = 120.0;  // slightly tighter overspeed
+    private static final double kP = 0.015;
     private long rpmInRangeSinceMs = 0;
     private Pose robotPose;
 
     /* ===================== FLYWHEEL KICK START ===================== */
 
     // FASTEST POSSIBLE SPINUP: open-loop full power "kick" then switch to velocity PID
-    public static double KICK_TIME = 0.80;   // heavy flywheel: start 0.7–1.0s
+    public static double KICK_TIME = 1.0;   // heavy flywheel: start 0.7–1.0s
     public static double HANDOFF_FRAC = 0.80; // handoff at 80% of TARGET_RPM (0.75–0.85)
 
     private boolean kickActive = true;
@@ -181,7 +201,44 @@ public class Auto extends OpMode {
         launchPrepActive = false;
         resetIntakeGatingAndFilters();
     }
+    private void updateTurretAim() {
 
+        double robotX = pose.getX();
+        double robotY = pose.getY();
+        double robotHeading = pose.getHeading();
+        double robotHeadingDeg = Math.toDegrees(robotHeading);
+        turretX = robotX + turretOffsetX*Math.cos(robotHeading) - turretOffsetY*Math.sin(robotHeading);
+        turretY = robotY + turretOffsetX*Math.sin(robotHeading) + turretOffsetY*Math.cos(robotHeading);
+        double dx = targetX - turretX;
+        double dy = targetY - turretY;
+
+        double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
+
+        double currentTurretDeg = tureta.getCurrentPosition() * DEG_PER_TICK_TURETA + startTurretAngle;
+        double targetTurretDeg = 0.0;
+        if(aimingEnabled) {
+            targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
+        } else {
+            targetTurretDeg = startTurretAngle;
+        }
+        currentTurretDeg=normalizeAngle(currentTurretDeg);
+        if(targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT){
+            targetTurretDeg = LEFT_LIMIT;
+        } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
+            targetTurretDeg = RIGHT_LIMIT;
+        }
+
+        double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
+
+        double power = error * kP;
+        power = Range.clip(power, -MAX_POWER_TURETA, MAX_POWER_TURETA);
+        tureta.setPower(power);
+    }
+    private double normalizeAngle(double angle) {
+        while (angle > 180) angle -= 360;
+        while (angle < -180) angle += 360;
+        return angle;
+    }
     private boolean rpmInRangeStable() {
         double target = TARGET_RPM; // in launch position we compute it; else it gets set to baseline
         boolean inRange = (rpm >= (target - RPM_TOL)) && (rpm <= (target + RPM_TOL));
@@ -230,11 +287,11 @@ public class Auto extends OpMode {
     @Override
     public void init() {
         panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
-
+        pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
         follower = Constants.createFollower(hardwareMap);
         follower.setStartingPose(new Pose(56, 8, Math.toRadians(90)));
         paths = new Paths(follower);
-
+        pinpoint.setStartPose(new Pose(56, 8, Math.toRadians(90)));
         intake = hardwareMap.get(DcMotor.class, "intake");
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
@@ -312,6 +369,7 @@ public class Auto extends OpMode {
     private double spinnerTarget = 0.0;
     private double spinnerCmd = 0.0;
     private double spinnerLastTarget = 0.0;
+    PinpointLocalizer pinpoint;
 
     private boolean spinnerInOvershoot = false;
     private double spinnerOvershootCmd = 0.0;
@@ -355,13 +413,14 @@ public class Auto extends OpMode {
     @Override
     public void loop() {
         follower.update();
-
+        pinpoint.update();
+        pose = pinpoint.getPose();
         updateFlywheel();
+        updateTurretAim();
         updateCulori();
         updateSpinnerServos();
 
         robotPose = follower.getPose();
-
         double remain = AUTO_TOTAL_S - getRuntime();
         if (remain <= PARK_IF_REMAIN_S && stage < 11) {
             // force park ASAP
@@ -402,6 +461,7 @@ public class Auto extends OpMode {
             case 1:
                 if (!pathStarted) {
                     follower.followPath(paths.Path9, 1.0, true);
+                    aimingEnabled = true;
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
@@ -414,6 +474,7 @@ public class Auto extends OpMode {
 
             // ================== SHOOT FIRST 3 ==================
             case 2:
+                aimingEnabled = true;
                 if (!shootStageStarted) {
                     if (delayDone()) {
                         startOuttake();
@@ -431,7 +492,7 @@ public class Auto extends OpMode {
             // ================== GO TO STACK ==================
             case 3:
                 if (outtakeMode) break;
-
+                aimingEnabled = false;
                 intakeMode = true;
                 spinIntake = true;
                 intake.setPower(1);
@@ -449,7 +510,7 @@ public class Auto extends OpMode {
             // ================== SWEEP STACK ==================
             case 4:
                 if (outtakeMode) break;
-
+                aimingEnabled = false;
                 intakeMode = true;
                 spinIntake = true;
                 intake.setPower(1);
@@ -468,7 +529,7 @@ public class Auto extends OpMode {
             // ================== RETURN TO SHOOT ==================
             case 5:
                 if (outtakeMode) break;
-
+                aimingEnabled = true;
                 intakeMode = true;
                 spinIntake = true;
                 intake.setPower(-1);
@@ -488,6 +549,7 @@ public class Auto extends OpMode {
 
             // ================== SHOOT STACK ==================
             case 6:
+                aimingEnabled = true;
                 if (!shootStageStarted) {
                     if (delayDone()) {
                         startOuttake();
@@ -505,7 +567,7 @@ public class Auto extends OpMode {
             // ================== SECOND STACK PASS ==================
             case 7:
                 if (outtakeMode) break;
-
+                aimingEnabled = false;
                 intakeMode = true;
                 spinIntake = true;
                 intake.setPower(1);
@@ -522,7 +584,7 @@ public class Auto extends OpMode {
 
             case 8:
                 if (outtakeMode) break;
-
+                aimingEnabled = false;
                 intakeMode = true;
                 spinIntake = true;
                 intake.setPower(1);
@@ -541,7 +603,7 @@ public class Auto extends OpMode {
             // ================== RETURN AGAIN ==================
             case 9:
                 if (outtakeMode) break;
-
+                aimingEnabled = true;
                 intakeMode = true;
                 spinIntake = true;
                 intake.setPower(-1);
@@ -560,6 +622,7 @@ public class Auto extends OpMode {
 
             // ================== FINAL SHOOT ==================
             case 10:
+                aimingEnabled = true;
                 if (!shootStageStarted) {
                     if (delayDone()) {
                         startOuttake();
@@ -576,6 +639,7 @@ public class Auto extends OpMode {
 
             // ================== PARK ==================
             case 11:
+                aimingEnabled = false;
                 if (!pathStarted) {
                     follower.followPath(paths.Path8, 1.0, true);
                     pathStarted = true;
