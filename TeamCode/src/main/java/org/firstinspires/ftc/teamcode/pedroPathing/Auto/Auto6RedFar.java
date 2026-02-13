@@ -1,41 +1,41 @@
 package org.firstinspires.ftc.teamcode.pedroPathing.Auto;
 
-import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
-import com.qualcomm.robotcore.eventloop.opmode.OpMode;
-import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
-import com.qualcomm.robotcore.hardware.*;
-import com.qualcomm.robotcore.util.ElapsedTime;
-
-import com.bylazar.telemetry.TelemetryManager;
 import com.bylazar.telemetry.PanelsTelemetry;
+import com.bylazar.telemetry.TelemetryManager;
+import com.pedropathing.follower.Follower;
+import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
+import com.pedropathing.geometry.BezierLine;
+import com.pedropathing.geometry.Pose;
+import com.pedropathing.paths.PathChain;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.hardware.ColorSensor;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.VoltageSensor;
+import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
-import com.pedropathing.geometry.BezierLine;
-import com.pedropathing.follower.Follower;
-import com.pedropathing.paths.PathChain;
-import com.pedropathing.geometry.Pose;
-import com.qualcomm.robotcore.util.Range;
-
 import java.util.Arrays;
 
-@Autonomous(name = "auto9BlueFar", group = "Test")
-public class Auto extends OpMode {
+@Autonomous(name = "auto6RedFar", group = "Test")
+public class Auto6RedFar extends OpMode {
 
-    /* ===================== TELEMETRY ===================== */
     private TelemetryManager panelsTelemetry;
 
-    /* ===================== PEDRO ===================== */
     public Follower follower;
     private boolean pathStarted = false;
     private Paths paths;
 
-    /* ===================== AUTONOMOUS STAGE ===================== */
-    int stage = 0;
-    /* ===================== DELAY GATE ===================== */
-    ElapsedTime autoDelay = new ElapsedTime();
-    boolean waiting = false;
-    final double COMMAND_DELAY = 0.0; // set to 0 for instant; change if you want a pause before each shoot
+    private int stage = 0;
+
+    private final ElapsedTime autoDelay = new ElapsedTime();
+    private boolean waiting = false;
+    private static final double COMMAND_DELAY = 0.0;
 
     private boolean delayDone() {
         if (!waiting) {
@@ -50,46 +50,37 @@ public class Auto extends OpMode {
         return false;
     }
 
-    /* ===================== HARDWARE ===================== */
-    DcMotor intake;
-    DcMotorEx tureta;
+    private DcMotor intake;
+    private DcMotorEx tureta;
 
-    DcMotorEx flywheel;
-    Servo spinnerCLose, spinnerFar, ejector;
-    ColorSensor colorsensorSLot1, colorsensorSLot2, colorsensorSLot3;
-    Servo trajectoryAngleModifier;
-    VoltageSensor batteryVoltage;
+    private DcMotorEx flywheel;
+    private Servo spinnerCLose, spinnerFar, ejector;
+    private ColorSensor colorsensorSLot1, colorsensorSLot2, colorsensorSLot3;
+    private Servo trajectoryAngleModifier;
+    private VoltageSensor batteryVoltage;
 
+    private static final double FLYWHEEL_TICKS_PER_REV = 28.0;
 
-    /* ===================== FLYWHEEL (PIDF VELOCITY) ===================== */
-    static final double FLYWHEEL_TICKS_PER_REV = 28.0;
-
-    // imported from TeleOp shooter
-    public static double TARGET_RPM = 2940 ; // 2940
-    // Start aggressive; tune after you get fast spin-up
-    public static double kP_v = 30.0;     // try 20–35
-    public static double kI_v = 0.0;      // keep 0 for fastest transient
-    public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
-
-    // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
-    public static double kF_v = 14.0;     // try 12.0–14.0
+    public static double TARGET_RPM = 2940;
+    public static double kP_v = 30.0;
+    public static double kI_v = 0.0;
+    public static double kD_v = 0.0;
+    public static double kF_v = 14.0;
 
     private double rpm = 0.0;
-    // ======= TELEOP-STYLE LAUNCH MODEL (ported) =======
-    private double trajectoryAngle = 70.0;
-    private int flywheelTargetRPM = 2940; // fallback
 
-    // geometry/physics (same as TeleOp)
-    private static final double absoluteTurretHeight = 0.25; // m
-    private static final double absoluteTargetHeight = 1.0;  // m
+    private double trajectoryAngle = 70.0;
+    private int flywheelTargetRPM = (int) TARGET_RPM;
+
+    private static final double absoluteTurretHeight = 0.25;
+    private static final double absoluteTargetHeight = 1.0;
     private static final double relativeHeight = absoluteTargetHeight - absoluteTurretHeight;
     private static final double prefferedMaxHeightThrow = relativeHeight + 0.3;
 
-    private static final double launcherEfficiency = 0.43; // tune
-    private static final double flywheelRadius = 0.048;     // m
+    private static final double launcherEfficiency = 0.43;
+    private static final double flywheelRadius = 0.048;
     private static final double g = 9.81;
 
-    // angle servo mapping (same as TeleOp)
     private static final double trajectoryAngleModifierGearRatio = 127 / 15.0;
     private static final double trajectoryAnglerMaxTravel = 300.0;
     private static final double trajectoryAnglePosPerDegree =
@@ -101,113 +92,99 @@ public class Auto extends OpMode {
     private static final int minFlywheelRPM = 1000;
     private static final int maxFlywheelRPM = 6000;
 
-
-    // Slow only the actual intake/sweep segments
-    private static final double INTAKE_SWEEP_SPEED = 0.3;   // case 4 (was 0.6)
-    private static final double INTAKE_PASS2_SPEED = 0.35;   // case 8 (was 1.0)
+    private static final double INTAKE_PASS_SPEED = 0.35;
     private static final double AUTO_TOTAL_S = 30.0;
     private static final double PARK_IF_REMAIN_S = 2.0;
 
+    private final int[] last5Sensor1 = new int[5];
+    private final int[] last5Sensor2 = new int[5];
+    private final int[] last5Sensor3 = new int[5];
 
+    private int indexSensor1 = 0;
+    private int indexSensor2 = 0;
+    private int indexSensor3 = 0;
 
-    /* ===================== SENSOR SMOOTHING (debug) ===================== */
-    int[] last5Sensor1 = new int[5];
-    int[] last5Sensor2 = new int[5];
-    int[] last5Sensor3 = new int[5];
+    private int Color1 = 0;
+    private int Color2 = 0;
+    private int Color3 = 0;
 
-    int indexSensor1 = 0;
-    int indexSensor2 = 0;
-    int indexSensor3 = 0;
+    private final int[] slots = new int[3];
+    private int slotIntakeIndex = 0;
 
-    int Color1 = 0;
-    int Color2 = 0;
-    int Color3 = 0;
+    private boolean intakeMode = false;
+    private boolean outtakeMode = false;
+    private boolean spinIntake = false;
 
-    /* ===================== OUTTAKE SLOTS ===================== */
-    int[] slots = new int[3];
-    int slotIntakeIndex = 0;
+    private static final double ejectorDown = 0.255;
+    private static final double ejectorUp = 0.03;
 
-    /* ===================== MODES ===================== */
-    boolean intakeMode = false;
-    boolean outtakeMode = false;
-    boolean spinIntake = false;
+    private static final double[] slotPositionsIntake = {0, 0.19, 0.38};
 
-    final double ejectorDown = 0.255;
-    final double ejectorUp = 0.03;
-
-    final double[] slotPositionsIntake = {0, 0.19, 0.38};
-    double Posspinner = 0;
-
-    /* ===================== SPINDEXER OFFSETS / POSITIONS ===================== */
-    private static final double SPINDEXER_OUTTAKE_OFFSET = -0.015;
-    private static final double SPINDEXER_INTAKE_OFFSET = -0.01;
     private static final double SPINNER_LAUNCH_POS = 0.085;
-
     private boolean launchPrepActive = false;
 
-    /* ===================== LOGICAL INVENTORY ===================== */
-    int[] logicalSlots = new int[3];
+    private final int[] logicalSlots = new int[3];
 
-    // intake detect internal
-    int[] lastNIntake = new int[3];
-    int idxIntake = 0;
+    private final int[] lastNIntake = new int[3];
+    private int idxIntake = 0;
+    private int lastStableIntakeColor = 0;
 
-    int lastStableIntakeColor = 0;
+    private boolean colorPending = false;
+    private long colorStartTimeMs = 0;
 
-    boolean colorPending = false;
-    long colorStartTimeMs = 0;
     private static final double MOTOR_TICKS_PER_REV = 384.5;
     private static final double MOTOR_TO_TURRET_RATIO = 75.0 / 26.0;
 
     private static final double DEG_PER_TICK_TURETA =
             360.0 / (MOTOR_TICKS_PER_REV * MOTOR_TO_TURRET_RATIO);
 
-    // Turret soft limits (degrees)
-    // Turret soft limits (degrees)
-    private static final double LEFT_LIMIT  = -110;
+    private static final double LEFT_LIMIT = -110;
     private static final double RIGHT_LIMIT = 110;
 
-    // Control (TeleOp style)
     private static final double kP = 0.015;
     private static final double MAX_POWER_TURETA = 0.4;
 
-    // Target (field coordinates)
-    double targetX = 10.0;
-    double targetY = 144.0;
+    // RED target
+    private double targetX = 134.0;
+    private double targetY = 144.0;
 
-    // TeleOp aiming geometry
     private static final double startTurretAngle = -180.0;
     private static final double turretOffsetX = 0.0;
-    private static final double turretOffsetY = 52 / 1000.0; // 0.052m (keep same as TeleOp)
+    private static final double turretOffsetY = 52 / 1000.0;
 
-    // Turret gate (TeleOp)
     private static final double TURRET_TOL_DEG = 2.0;
     private boolean turretOnTarget = false;
 
-    // For internal aiming math
-    double turretX = 0.0;
-    double turretY = 0.0;
-    boolean detectionLocked = false;
-    boolean waitingForClear = false;
-    boolean spinnerMoving = false;
+    private double turretX = 0.0;
+    private double turretY = 0.0;
 
-    static final long DETECT_DELAY_MS = 0;
-    static final long SERVO_MOVE_LOCK_MS = 45;
-    long servoMoveStartMs = 0;
+    private boolean aimingEnabled = true;
 
-    /* =======================================================================================
-       SHOOTING MECHANISM (PID + RPM GATE + FSM) IMPORTED FROM TeleOp
-       ======================================================================================= */
+    private boolean detectionLocked = false;
+    private boolean waitingForClear = false;
+    private boolean spinnerMoving = false;
+
+    private static final long DETECT_DELAY_MS = 0;
+    private static final long SERVO_MOVE_LOCK_MS = 45;
+    private long servoMoveStartMs = 0;
 
     private int outtakeStep = 0;
     private long stepStartMs = 0;
 
     private static final double RPM_TOL = 50.0;
-    private static final long RPM_STABLE_MS = 150;   // 40–80ms is fine in auto
+    private static final long RPM_STABLE_MS = 150;
     private long rpmInRangeSinceMs = 0;
+
+    private static final long OUTTAKE_INITIAL_DELAY_MS = 200;
+    private static final long OUTTAKE_EJECTOR_UP_MS = 250;
+    private static final long OUTTAKE_EJECTOR_DOWN_MS = 170;
+    private static final long OUTTAKE_SPINNER_MOVE_MS = 200;
+
+    private boolean shootStageStarted = false;
+
     private Pose pose;
-    PinpointLocalizer pinpoint;
-    boolean aimingEnabled = true;
+    private PinpointLocalizer pinpoint;
+
     private double normalizeAngle(double angle) {
         while (angle > 180) angle -= 360;
         while (angle < -180) angle += 360;
@@ -215,11 +192,9 @@ public class Auto extends OpMode {
     }
 
     private void computeParameters() {
-        // NOTE: TeleOp used turretX/turretY already offset-corrected; same here.
-        // inches -> meters conversion is *0.0254
         double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
 
-        if (d <= 0) {
+        if (d <= 1e-6) {
             flywheelTargetRPM = 2000;
             trajectoryAngle = maxTrajectoryAngle;
             return;
@@ -263,6 +238,7 @@ public class Auto extends OpMode {
     }
 
     private void setTrajectoryAngle(double angle) {
+        if (trajectoryAngleModifier == null) return;
         angle = Range.clip(angle, minTrajectoryAngle, maxTrajectoryAngle);
         double position = (angle - minTrajectoryAngle) * trajectoryAnglePosPerDegree;
         trajectoryAngleModifier.setPosition(position);
@@ -272,7 +248,6 @@ public class Auto extends OpMode {
         setTrajectoryAngle(trajectoryAngle);
     }
 
-
     private void updateTurretAim() {
         if (pose == null) return;
 
@@ -281,7 +256,6 @@ public class Auto extends OpMode {
         double robotHeading = pose.getHeading();
         double robotHeadingDeg = Math.toDegrees(robotHeading);
 
-        // TeleOp-style turret position offset in field frame
         turretX = robotX + turretOffsetX * Math.cos(robotHeading) - turretOffsetY * Math.sin(robotHeading);
         turretY = robotY + turretOffsetX * Math.sin(robotHeading) + turretOffsetY * Math.cos(robotHeading);
 
@@ -300,7 +274,6 @@ public class Auto extends OpMode {
 
         currentTurretDeg = normalizeAngle(currentTurretDeg);
 
-        // Keep EXACT TeleOp limit logic (even if it looks inverted)
         if (targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT) {
             targetTurretDeg = LEFT_LIMIT;
         } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
@@ -310,16 +283,11 @@ public class Auto extends OpMode {
         double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
         turretOnTarget = Math.abs(error) <= TURRET_TOL_DEG;
 
-        double power = error * kP;
-        power = Range.clip(power, -MAX_POWER_TURETA, MAX_POWER_TURETA);
+        double power = Range.clip(error * kP, -MAX_POWER_TURETA, MAX_POWER_TURETA);
         tureta.setPower(power);
     }
 
-
-
-
     private void abortOuttakeNow() {
-        // put everything in a safe state and stop the shooter FSM
         outtakeMode = false;
         shootStageStarted = false;
         waiting = false;
@@ -329,7 +297,7 @@ public class Auto extends OpMode {
 
         intakeMode = false;
         spinIntake = false;
-        intake.setPower(0);
+        if (intake != null) intake.setPower(0);
 
         outtakeStep = 0;
         stepStartMs = 0;
@@ -343,6 +311,7 @@ public class Auto extends OpMode {
         double target = flywheelTargetRPM;
         boolean inRange = (rpm >= (target - RPM_TOL)) && (rpm <= (target + RPM_TOL));
         long now = System.currentTimeMillis();
+
         if (!inRange) {
             rpmInRangeSinceMs = 0;
             return false;
@@ -356,65 +325,39 @@ public class Auto extends OpMode {
         stepStartMs = System.currentTimeMillis();
     }
 
-    private static final long OUTTAKE_INITIAL_DELAY_MS = 200;
-    private static final long OUTTAKE_EJECTOR_UP_MS = 250;
-    private static final long OUTTAKE_EJECTOR_DOWN_MS = 170;
-    private static final long OUTTAKE_SPINNER_MOVE_MS = 200;
-
-    // latch so shoot stages BLOCK until outtakeMode finishes
-    private boolean shootStageStarted = false;
-
-    // Pause after each guaranteed intake ball
-    private static final double POST_BALL_PAUSE_S = 0.5;
-    private final ElapsedTime postBallTimer = new ElapsedTime();
-    private boolean postBallWaiting = false;
-    private boolean resetTimer = true;
-
-    private boolean postBallPauseDone() {
-        if (!postBallWaiting) {
-            postBallWaiting = true;
-            postBallTimer.reset();
-            return false;
-        }
-        if (postBallTimer.seconds() >= POST_BALL_PAUSE_S) {
-            postBallWaiting = false;
-            return true;
-        }
-        return false;
-    }
-
-    /* ===================== INIT ===================== */
     @Override
     public void init() {
         panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
 
         follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(57, 9, Math.toRadians(90))); //era 56 cu 8
+        follower.setStartingPose(new Pose(87, 9, Math.toRadians(90)));
         paths = new Paths(follower);
+
         pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
-        pinpoint.setStartPose(new Pose(57,9,Math.toRadians(90))); //era 56 cu 8
+        pinpoint.setStartPose(new Pose(87, 9, Math.toRadians(90)));
+
         intake = hardwareMap.get(DcMotor.class, "intake");
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
-        flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-        flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         tureta = hardwareMap.get(DcMotorEx.class, "tureta");
-        tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        batteryVoltage = hardwareMap.voltageSensor.iterator().next();
-
-        // you had REVERSE in your code
-        intake.setDirection(DcMotorSimple.Direction.REVERSE);
 
         spinnerCLose = hardwareMap.get(Servo.class, "SpinnerClose");
         spinnerFar = hardwareMap.get(Servo.class, "SpinnerFar");
         ejector = hardwareMap.get(Servo.class, "ejector");
-
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
-        trajectoryAngleModifier.setPosition(0);
 
         colorsensorSLot1 = hardwareMap.colorSensor.get("Color1");
         colorsensorSLot2 = hardwareMap.colorSensor.get("Color2");
         colorsensorSLot3 = hardwareMap.colorSensor.get("Color3");
+
+        batteryVoltage = hardwareMap.voltageSensor.iterator().next();
+
+        flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        intake.setDirection(DcMotorSimple.Direction.REVERSE);
 
         ejector.setDirection(Servo.Direction.REVERSE);
         ejector.setPosition(ejectorDown);
@@ -422,11 +365,11 @@ public class Auto extends OpMode {
         spinnerFar.setPosition(0);
         spinnerCLose.setPosition(0);
 
+        if (trajectoryAngleModifier != null) trajectoryAngleModifier.setPosition(0);
+
         autoDelay.reset();
 
-        // Start state
         stage = 0;
-        int pathState = 0;
         pathStarted = false;
 
         intakeMode = true;
@@ -441,19 +384,13 @@ public class Auto extends OpMode {
 
         logicalSlots[0] = logicalSlots[1] = logicalSlots[2] = 0;
 
-        // shooter fsm reset
         outtakeStep = 0;
         stepStartMs = 0;
         rpmInRangeSinceMs = 0;
 
         shootStageStarted = false;
         waiting = false;
-
-        postBallWaiting = false;
-        postBallTimer.reset();
-
     }
-    /* ===================== SPINNER SERVO CONTROLLER ===================== */
 
     private static final double SPINNER_FAR_OFFSET = -0.010;
     private static final double SPINNER_CLOSE_OFFSET = -0.010;
@@ -503,64 +440,42 @@ public class Auto extends OpMode {
         spinnerCLose.setPosition(closePos);
     }
 
-
-    /* ===================== LOOP ===================== */
     @Override
     public void loop() {
-        if(resetTimer){
-            autoDelay.reset();
-            resetTimer = false;
-        }
         pinpoint.update();
         follower.update();
         pose = follower.getPose();
 
-// aim first so turretX/turretY are correct
         updateTurretAim();
-
-// compute RPM/angle only when aiming is enabled
         if (aimingEnabled) {
             computeParameters();
-            updateTrajectoryAngle(); // only if you added it / want angler servo
+            updateTrajectoryAngle();
         } else {
-            // optional fallback
-            flywheelTargetRPM = (int) TARGET_RPM; // or a fixed safe value
+            flywheelTargetRPM = (int) TARGET_RPM;
         }
-
-        // now run flywheel control using flywheelTargetRPM
         updateFlywheel();
 
         updateCulori();
         updateSpinnerServos();
 
-        Pose robotPose = follower.getPose();
-
         double remain = AUTO_TOTAL_S - autoDelay.seconds();
-        if (remain <= PARK_IF_REMAIN_S && stage < 11) {
-            // force park ASAP
+        if (remain <= PARK_IF_REMAIN_S && stage < 8) {
             abortOuttakeNow();
-            stage = 11;
-            pathStarted = false;     // so case 11 will start the park path immediately
+            stage = 8;
+            pathStarted = false;
         }
 
-        // intake detection only while intaking and not shooting and not launch holding
         if (intakeMode && !outtakeMode && !launchPrepActive) {
             colorDrivenSpinnerLogicServos();
         }
-
-        // auto park at launch when full
         autoLaunchPrepLogic();
 
-
-        // ===================== AUTONOMOUS FSM =====================
-        // ===================== AUTONOMOUS FSM =====================
         switch (stage) {
 
-            // ================== INITIAL POSITION ==================
             case 0:
                 if (outtakeMode) break;
                 if (!pathStarted) {
-                    follower.followPath(paths.Path0, 1, true);
+                    follower.followPath(paths.Path0, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
@@ -571,7 +486,6 @@ public class Auto extends OpMode {
                 }
                 break;
 
-            // ================== GO TO SHOOT LINE ==================
             case 1:
                 aimingEnabled = true;
                 if (!pathStarted) {
@@ -582,11 +496,10 @@ public class Auto extends OpMode {
                     pathStarted = false;
                     waiting = false;
                     shootStageStarted = false;
-                    stage = 2;   // SHOOT
+                    stage = 2;
                 }
                 break;
 
-            // ================== SHOOT FIRST 3 ==================
             case 2:
                 aimingEnabled = true;
                 if (!shootStageStarted) {
@@ -594,16 +507,13 @@ public class Auto extends OpMode {
                         startOuttake();
                         shootStageStarted = true;
                     }
-                } else {
-                    if (!outtakeMode) {
-                        shootStageStarted = false;
-                        waiting = false;
-                        stage = 3;
-                    }
+                } else if (!outtakeMode) {
+                    shootStageStarted = false;
+                    waiting = false;
+                    stage = 3;
                 }
                 break;
 
-            // ================== GO TO STACK ==================
             case 3:
                 aimingEnabled = false;
                 if (outtakeMode) break;
@@ -613,7 +523,7 @@ public class Auto extends OpMode {
                 intake.setPower(1);
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path1, 1.0, true);
+                    follower.followPath(paths.Path3, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
@@ -622,68 +532,10 @@ public class Auto extends OpMode {
                 }
                 break;
 
-            // ================== SWEEP STACK ==================
             case 4:
-                if (outtakeMode) break;
                 aimingEnabled = false;
-                intakeMode = true;
-                spinIntake = true;
-                intake.setPower(1);
-
-                if (!pathStarted) {
-                    follower.followPath(paths.Path2, INTAKE_SWEEP_SPEED, true);
-                    pathStarted = true;
-                }
-
-                if (!follower.isBusy()) {
-                    setSpinnerTarget(0.085);
-                    pathStarted = false;
-                    stage = 5;
-                }
-                break;
-
-            // ================== RETURN TO SHOOT ==================
-            case 5:
                 if (outtakeMode) break;
-                aimingEnabled = true;
-                intakeMode = true;
-                spinIntake = true;
-                intake.setPower(-0.567);
 
-
-                if (!pathStarted) {
-                    follower.followPath(paths.Path4, 1.0, true);
-                    pathStarted = true;
-                }
-                if (!follower.isBusy()) {
-                    pathStarted = false;
-                    waiting = false;
-                    shootStageStarted = false;
-                    stage = 6;
-                }
-                break;
-
-            // ================== SHOOT STACK ==================
-            case 6:
-                aimingEnabled = true;
-                if (!shootStageStarted) {
-                    if (delayDone()) {
-                        startOuttake();
-                        shootStageStarted = true;
-                    }
-                } else {
-                    if (!outtakeMode) {
-                        shootStageStarted = false;
-                        waiting = false;
-                        stage = 7;
-                    }
-                }
-                break;
-
-            // ================== SECOND STACK PASS ==================
-            case 7:
-                if (outtakeMode) break;
-                aimingEnabled = false;
                 intakeMode = true;
                 spinIntake = true;
                 intake.setPower(1);
@@ -694,11 +546,11 @@ public class Auto extends OpMode {
                 }
                 if (!follower.isBusy()) {
                     pathStarted = false;
-                    stage = 8;
+                    stage = 5;
                 }
                 break;
 
-            case 8:
+            case 5:
                 aimingEnabled = false;
                 if (outtakeMode) break;
 
@@ -707,21 +559,20 @@ public class Auto extends OpMode {
                 intake.setPower(1);
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path6, INTAKE_PASS2_SPEED, true);
+                    follower.followPath(paths.Path6, INTAKE_PASS_SPEED, true);
                     pathStarted = true;
                 }
-
-                if ( !follower.isBusy()) {
-                    setSpinnerTarget(0.085);
+                if (!follower.isBusy()) {
+                    setSpinnerTarget(SPINNER_LAUNCH_POS);
                     pathStarted = false;
-                    stage = 9;
+                    stage = 6;
                 }
                 break;
 
-            // ================== RETURN AGAIN ==================
-            case 9:
-                if (outtakeMode) break;
+            case 6:
                 aimingEnabled = true;
+                if (outtakeMode) break;
+
                 intakeMode = true;
                 spinIntake = true;
                 intake.setPower(-1);
@@ -734,138 +585,90 @@ public class Auto extends OpMode {
                     pathStarted = false;
                     waiting = false;
                     shootStageStarted = false;
-                    stage = 10;
+                    stage = 7;
                 }
                 break;
 
-            // ================== FINAL SHOOT ==================
-            case 10:
+            case 7:
                 aimingEnabled = true;
                 if (!shootStageStarted) {
                     if (delayDone()) {
                         startOuttake();
                         shootStageStarted = true;
                     }
-                } else {
-                    if (!outtakeMode) {
-                        shootStageStarted = false;
-                        waiting = false;
-                        stage = 11;
-                    }
+                } else if (!outtakeMode) {
+                    shootStageStarted = false;
+                    waiting = false;
+                    stage = 8;
                 }
                 break;
 
-            // ================== PARK ==================
-            case 11:
+            case 8:
                 aimingEnabled = false;
                 if (!pathStarted) {
                     follower.followPath(paths.Path8, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
-                    stage = 12;
+                    stage = 9;
                 }
                 break;
 
-            case 12:
+            case 9:
                 requestOpModeStop();
                 break;
         }
 
-
-        // run shooter FSM after stage logic
         if (outtakeMode) {
             runOuttake();
         }
-
-        // ===================== TELEMETRY =====================
-//        panelsTelemetry.debug("Robot X", robotPose.getX());
-//        panelsTelemetry.debug("Robot Y", robotPose.getY());
-//        panelsTelemetry.debug("Robot Heading (deg)", Math.toDegrees(robotPose.getHeading()));
-//
-//
-//        panelsTelemetry.debug("Auto Stage", stage);
-//        panelsTelemetry.debug("Path Started", pathStarted);
-//        panelsTelemetry.debug("Follower Busy", follower.isBusy());
-//
-//        panelsTelemetry.debug("Flywheel RPM", rpm);
-//        panelsTelemetry.debug("Flywheel Target", TARGET_RPM);
-//        panelsTelemetry.debug("rpmStable", rpmInRangeStable());
-//
-//
-//        panelsTelemetry.update(telemetry);
     }
 
-    /* ===================== START OUTTAKE ===================== */
     private void startOuttake() {
         intakeMode = false;
         outtakeMode = true;
         spinIntake = false;
         aimingEnabled = true;
 
-        // feeding during shooting (with REVERSE direction, power(1) is "reverse")
-
-        // prevent launch-hold overwriting during sequence
         launchPrepActive = false;
 
-        // reset shooter FSM
         outtakeStep = 0;
         stepStartMs = System.currentTimeMillis();
         rpmInRangeSinceMs = 0;
-
     }
 
-    /* ===================== FLYWHEEL ===================== */
-    /* ===================== FLYWHEEL ===================== */
     private void updateFlywheel() {
-        // Measure RPM
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
 
-        // Voltage compensation for feedforward
         double v = batteryVoltage.getVoltage();
-        if (v < 1.0) v = 12.0; // safety
+        if (v < 1.0) v = 12.0;
         double kF_comp = kF_v * (12.0 / v);
 
         double target = flywheelTargetRPM;
-
-        // Convert target to ticks/sec for RUN_USING_ENCODER velocity
         double targetTPS = target * FLYWHEEL_TICKS_PER_REV / 60.0;
 
-        // === Control policy ===
-        // In-band (±100rpm): PID velocity hold
-        // Below band: full power 1.0
-        // Above band: power 0.0
         if (Math.abs(rpm - target) <= RPM_TOL) {
-            // PID HOLD
             if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
-                flywheel.setPower(0); // clear any open-loop command
+                flywheel.setPower(0);
                 flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
             }
             flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_comp);
             flywheel.setVelocity(targetTPS);
         } else if (rpm < (target - RPM_TOL)) {
-            // KICK UP FAST
             if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
                 flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
             }
             flywheel.setPower(1.0);
         } else {
-            // TOO FAST -> CUT POWER
             if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
                 flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
             }
             flywheel.setPower(0.0);
         }
 
-        // Refresh rpm after command (optional but nice for telemetry stability)
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
     }
 
-
-
-
-
-    /* ===================== OUTTAKE SEQUENCE (TeleOp shooter FSM) ===================== */
     private void runOuttake() {
         intake.setPower(1);
 
@@ -873,14 +676,11 @@ public class Auto extends OpMode {
         long dt = now - stepStartMs;
 
         switch (outtakeStep) {
-
             case 0:
-                // snapshot inventory once
                 slots[0] = logicalSlots[0];
                 slots[1] = logicalSlots[1];
                 slots[2] = logicalSlots[2];
 
-                // clear logical so intake recounts after
                 logicalSlots[0] = 0;
                 logicalSlots[1] = 0;
                 logicalSlots[2] = 0;
@@ -889,8 +689,7 @@ public class Auto extends OpMode {
                 Color2 = 0;
                 Color3 = 0;
 
-                // start at launch position
-                setSpinnerTarget(0.085);
+                setSpinnerTarget(SPINNER_LAUNCH_POS);
 
                 rpmInRangeSinceMs = 0;
                 startStep(1);
@@ -901,7 +700,6 @@ public class Auto extends OpMode {
                 break;
 
             case 2:
-                // SHOOT #1 only when rpm stable in range
                 if (rpmInRangeStable() && turretOnTarget) {
                     ejector.setPosition(ejectorUp);
                     startStep(3);
@@ -930,7 +728,6 @@ public class Auto extends OpMode {
                 break;
 
             case 6:
-                // SHOOT #2
                 if (rpmInRangeStable() && turretOnTarget) {
                     ejector.setPosition(ejectorUp);
                     startStep(7);
@@ -959,7 +756,6 @@ public class Auto extends OpMode {
                 break;
 
             case 10:
-                // SHOOT #3
                 if (rpmInRangeStable() && turretOnTarget) {
                     ejector.setPosition(ejectorUp);
                     startStep(11);
@@ -975,22 +771,18 @@ public class Auto extends OpMode {
 
             case 12:
                 if (dt >= OUTTAKE_EJECTOR_DOWN_MS) {
-
-                    // end
-                    setSpinnerTarget(0);
+                    setSpinnerTarget(0.0);
 
                     outtakeMode = false;
-
                     intakeMode = false;
                     spinIntake = false;
 
                     slotIntakeIndex = 0;
-                    setSpinnerTarget(0);
+                    setSpinnerTarget(0.0);
 
                     launchPrepActive = false;
                     resetIntakeGatingAndFilters();
 
-                    // reset shooter FSM
                     outtakeStep = 0;
                     stepStartMs = 0;
                     rpmInRangeSinceMs = 0;
@@ -999,7 +791,6 @@ public class Auto extends OpMode {
         }
     }
 
-    /* ===================== COLOR DETECTION ===================== */
     private double getHue(int r, int g, int b) {
         int max = Math.max(r, Math.max(g, b));
         int min = Math.min(r, Math.min(g, b));
@@ -1018,44 +809,22 @@ public class Auto extends OpMode {
         return h;
     }
 
-    private int smekerie1(ColorSensor colorSensor) {
+    private boolean inRange(double value, double min, double max) {
+        return value >= min && value <= max;
+    }
 
+    private int smekerie1(ColorSensor colorSensor) {
         int r = colorSensor.red();
         int g = colorSensor.green();
         int b = colorSensor.blue();
         int alpha = colorSensor.alpha();
         double h = getHue(r, g, b);
 
-        int detected;
-
-        // ---- NOTHING / LOW LIGHT ----
-        if (alpha < 90 && inRange(h, 140, 155)) {
-            detected = 0;
-        }
-
-        // ---- COLOR 2 (HIGH HUE / PURPLE AREA) ----
-        else if (h > 210 || (alpha < 100 && inRange(h, 155, 185))) {
-            detected = 2;
-        }
-
-        // ---- COLOR 1 (GREENISH AREA) ----
-        else if (inRange(h, 135, 160) && alpha > 90) {
-            detected = 1;
-        }
-
-        // ---- COLOR 2 SPECIFIC BAND ----
-        else if (inRange(h, 195, 230) && alpha < 110) {
-            detected = 2;
-        }
-
-        else {
-            detected = 0;
-        }
-
-        return detected;
-    }
-    private boolean inRange(double value, double min, double max) {
-        return value >= min && value <= max;
+        if (alpha < 90 && inRange(h, 140, 155)) return 0;
+        else if (h > 210 || (alpha < 100 && inRange(h, 155, 185))) return 2;
+        else if (inRange(h, 135, 160) && alpha > 90) return 1;
+        else if (inRange(h, 195, 230) && alpha < 110) return 2;
+        else return 0;
     }
 
     private int CuloareFinala1(ColorSensor sensor, int[] last5, int index) {
@@ -1105,7 +874,6 @@ public class Auto extends OpMode {
         idxIntake = 0;
     }
 
-    // ULTRA-FAST intake smoothing: 3 samples, need 2
     private int processIntakeSensor(ColorSensor sensor) {
         int detected = smekerie1(sensor);
 
@@ -1127,7 +895,6 @@ public class Auto extends OpMode {
 
     private void colorDrivenSpinnerLogicServos() {
         if (spinnerMoving) {
-            // Spinner should not move without intake pulling (friction reducer / ball seating)
             if (!outtakeMode) {
                 intakeMode = true;
                 spinIntake = true;
@@ -1143,8 +910,6 @@ public class Auto extends OpMode {
             }
         }
 
-
-
         if (waitingForClear) {
             int intakeColorNow = processIntakeSensor(colorsensorSLot1);
             if (intakeColorNow == 0) {
@@ -1157,9 +922,7 @@ public class Auto extends OpMode {
         int intakeColor = processIntakeSensor(colorsensorSLot1);
 
         boolean newColorDetected = (intakeColor != 0 && lastStableIntakeColor == 0);
-        if (newColorDetected) {
-            lastStableIntakeColor = intakeColor;
-        }
+        if (newColorDetected) lastStableIntakeColor = intakeColor;
 
         if (newColorDetected && !colorPending && !detectionLocked) {
             colorStartTimeMs = System.currentTimeMillis();
@@ -1170,10 +933,8 @@ public class Auto extends OpMode {
             logicalSlots[0] = intakeColor;
             rotateLogicalSlotsRight();
 
-            slotIntakeIndex++;
-            slotIntakeIndex = slotIntakeIndex % 3;
+            slotIntakeIndex = (slotIntakeIndex + 1) % 3;
             setSpinnerTarget(slotPositionsIntake[slotIntakeIndex]);
-
 
             waitingForClear = true;
             detectionLocked = true;
@@ -1184,7 +945,6 @@ public class Auto extends OpMode {
         }
     }
 
-    // When full -> park at launch position and STAY until outtake finishes
     private void autoLaunchPrepLogic() {
         if (outtakeMode) return;
 
@@ -1196,87 +956,46 @@ public class Auto extends OpMode {
         }
     }
 
-    /* ===================== PATHS ===================== */
     public static class Paths {
-        public PathChain Path0;
-
-        public PathChain Path9;
-        public PathChain Path3;
-        public PathChain Path1;
-        public PathChain Path2;
-        public PathChain Path4;
-        public PathChain Path5;
-        public PathChain Path6;
-        public PathChain Path7;
-        public PathChain Path8;
+        public PathChain Path0, Path9, Path3, Path5, Path6, Path7, Path8;
 
         public Paths(Follower follower) {
+
             Path0 = follower.pathBuilder()
-                    .addPath(new BezierLine(new Pose(56, 8), new Pose(61.836, 26.8194)))
-                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(293))
+                    .addPath(new BezierLine(new Pose(88.000, 8.000), new Pose(82.164, 26.8194)))
+                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(-113))
                     .build();
 
             Path9 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(57.000, 9.000),
-                            new Pose(57.000, 12.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(293), Math.toRadians(293))
+                    .addPath(new BezierLine(new Pose(87.000, 9.000), new Pose(87.000, 12.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(-113), Math.toRadians(-113))
                     .build();
 
             Path3 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(57.000, 12.000),
-                            new Pose(57.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(299))
+                    .addPath(new BezierLine(new Pose(87.000, 12.000), new Pose(87.000, 21.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(-119))
                     .build();
 
-            Path1 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(57.000, 21.000),
-                            new Pose(47.000, 33.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(180))
-                    .build();
-
-            Path2 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(47.000, 33.000),
-                            new Pose(9.000, 33.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
-                    .build();
-
-            Path4 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(9.000, 33.000),
-                            new Pose(57.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(299))
-                    .build();
-
+            // single pass: reuse your RED "second pass" geometry
             Path5 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(57.000, 21.000),
-                            new Pose(21.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(200))
+                    .addPath(new BezierLine(new Pose(87.000, 21.000), new Pose(123.000, 21.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(-119), Math.toRadians(-20))
                     .build();
 
             Path6 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(21.000, 21.000),
-                            new Pose(13.000, 12.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(200), Math.toRadians(200))
+                    .addPath(new BezierLine(new Pose(123.000, 21.000), new Pose(131.000, 12.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(-20), Math.toRadians(-20))
                     .build();
 
             Path7 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(13.000, 12.000),
-                            new Pose(57.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(200), Math.toRadians(299))
+                    .addPath(new BezierLine(new Pose(131.000, 12.000), new Pose(87.000, 21.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(-20), Math.toRadians(-119))
                     .build();
 
+            // park (mirrored from Blue 6-ball delta)
             Path8 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(57.000, 21.000),
-                            new Pose(46.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(299))
+                    .addPath(new BezierLine(new Pose(87.000, 21.000), new Pose(98.000, 21.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(-119), Math.toRadians(-119))
                     .build();
         }
     }

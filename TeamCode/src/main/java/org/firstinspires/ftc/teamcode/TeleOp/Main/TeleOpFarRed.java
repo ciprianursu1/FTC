@@ -21,8 +21,8 @@ import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
 import java.util.Arrays;
 
-@TeleOp(name = "&Main Branch Blue Far")
-public class TeleOpStefan extends LinearOpMode {
+@TeleOp(name = "&Main Branch Red Far")
+public class TeleOpFarRed extends LinearOpMode {
 
     /* ===================== FAST INTAKE / SERVO GATING (from Auto) ===================== */
     static final long DETECT_DELAY_MS = 0;
@@ -109,12 +109,12 @@ public class TeleOpStefan extends LinearOpMode {
     private static final double MAX_POWER_TURETA = 0.4;
 
     // Target (field coordinates)
-    double targetX = 10; //10
-    double targetY = 137.5; //137.5
+    double targetX = 134;      // 144 - 10
+    double targetY = 137.5;    // same
 
     // Basket odometry reset pose (measured on field)
     private static final Pose BASKET_RESET_POSE =
-            new Pose(28.00, 131.00, Math.toRadians(324));
+            new Pose(116.00, 131.00, Math.toRadians(-144));
 
 
     // Turret gate (from Auto)
@@ -865,7 +865,7 @@ public class TeleOpStefan extends LinearOpMode {
     /* ===================== LOCALIZATION ===================== */
     private void initLocalization() {
         pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
-        startPose = new Pose(46.00, 21.00, Math.toRadians(299)); //64.3 15.74 90
+        startPose = new Pose(98.00, 21.00, Math.toRadians(-119));
         pinpoint.setStartPose(startPose);
     }
 
