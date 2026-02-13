@@ -65,17 +65,17 @@ public class Auto extends OpMode {
     public static double TARGET_RPM = 3150.0;
 
     // Start aggressive; tune after you get fast spin-up
-    public static double kP_v = 25.0;     // try 20–35
+    public static double kP_v = 30.0;     // try 20–35
     public static double kI_v = 0.0;      // keep 0 for fastest transient
     public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
 
     // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
-    public static double kF_v = 12.5;     // try 12.0–14.0
+    public static double kF_v = 14.0;     // try 12.0–14.0
 
     private double targetTPS;
     private double rpm = 0.0;
     // Slow only the actual intake/sweep segments
-    private static final double INTAKE_SWEEP_SPEED = 0.35;   // case 4 (was 0.6)
+    private static final double INTAKE_SWEEP_SPEED = 0.25;   // case 4 (was 0.6)
     private static final double INTAKE_PASS2_SPEED = 0.35;   // case 8 (was 1.0)
     private static final double AUTO_TOTAL_S = 30.0;
     private static final double PARK_IF_REMAIN_S = 2.0;
@@ -144,19 +144,16 @@ public class Auto extends OpMode {
     private int outtakeStep = 0;
     private long stepStartMs = 0;
 
-    private static final double RPM_TOL = 300.0;
+    private static final double RPM_TOL = 100.0;
     private static final long RPM_STABLE_MS = 60;   // 40–80ms is fine in auto
-
-    private static final double RPM_TOL_LOW  = 160.0;  // allow underspeed more
-    private static final double RPM_TOL_HIGH = 120.0;  // slightly tighter overspeed
     private long rpmInRangeSinceMs = 0;
     private Pose robotPose;
 
     /* ===================== FLYWHEEL KICK START ===================== */
 
     // FASTEST POSSIBLE SPINUP: open-loop full power "kick" then switch to velocity PID
-    public static double KICK_TIME = 0.80;   // heavy flywheel: start 0.7–1.0s
-    public static double HANDOFF_FRAC = 0.80; // handoff at 80% of TARGET_RPM (0.75–0.85)
+    public static double KICK_TIME = 2.00;   // heavy flywheel: start 0.7–1.0s
+    public static double HANDOFF_FRAC = 1.0; // handoff at 80% of TARGET_RPM (0.75–0.85)
 
     private boolean kickActive = true;
     private final ElapsedTime kickTimer = new ElapsedTime();
