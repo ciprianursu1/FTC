@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.hardware.*;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import org.firstinspires.ftc.teamcode.TeleOp.Main.DCSpindexer;
+import org.firstinspires.ftc.teamcode.TeleOp.Main.PoseStorage;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import com.pedropathing.geometry.BezierLine;
 import com.pedropathing.follower.Follower;
@@ -382,6 +383,14 @@ public class AutoDC extends OpMode {
                 requestOpModeStop();
                 break;
         }
+    }
+    @Override
+    public void stop() {
+        double x = pose.getX();
+        double y = pose.getY();
+        double heading = pose.getHeading();
+
+        PoseStorage.savePose(hardwareMap.appContext, x, y, heading);
     }
     private void updateFlywheel() {
         // Measure RPM

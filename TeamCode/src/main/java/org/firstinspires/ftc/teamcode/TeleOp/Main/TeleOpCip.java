@@ -116,7 +116,15 @@ public class TeleOpCip extends OpMode {
         back_right = hardwareMap.dcMotor.get("rr");
         pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
         startPose = new Pose(64.3, 15.74/2.0, Math.toRadians(90));
-        pinpoint.setStartPose(startPose);
+        pinpoint.setPose(startPose);
+//        double[] pose = PoseStorage.loadPose(hardwareMap.appContext);
+//
+//        double x = pose[0];
+//        double y = pose[1];
+//        double heading = pose[2];
+//
+//        pinpoint.setPose(new Pose(x,y,heading));
+
         front_right.setDirection(DcMotorSimple.Direction.FORWARD);
         back_right.setDirection(DcMotorSimple.Direction.FORWARD);
         front_left.setDirection(DcMotorSimple.Direction.REVERSE);
