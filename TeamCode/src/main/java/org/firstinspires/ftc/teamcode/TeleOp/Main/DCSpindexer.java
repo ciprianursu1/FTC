@@ -18,7 +18,7 @@ public class DCSpindexer {
     final double TICKS_PER_REV = 384.5;
     final double TICKS_PER_120 = TICKS_PER_REV/3.0;
     final double SPINDEXER_SPEED = 0.3;
-    final double TRANSFER_UP = 0.0;
+    final double TRANSFER_UP = 0.02;
     final double TRANSFER_DOWN = 0.255;
     final double GREEN_MIN = 130;
     final double GREEN_MAX = 160;
@@ -48,7 +48,7 @@ public class DCSpindexer {
     int currentSlot = 0;
     int targetSlot = 0;
     int motifIndex = 0;
-    boolean requestingOuttake = false;
+    public boolean requestingOuttake = false;
     DcMotorEx spindexer;
     Servo transfer;
     RevColorSensorV3[] colorSensors = new RevColorSensorV3[3];
@@ -263,6 +263,11 @@ public class DCSpindexer {
             case TRANSFERRING:
                 if(!requestingOuttake) {
                     state = SpindexerState.ROTATING_TO_EMPTY;
+                    if(transferUp){
+                        transfer.setPosition(TRANSFER_DOWN);
+                        startDelay(300);
+                        transferUp = false;
+                    }
                     break;
                 }
                 if(transferUp && readyToShoot) {
@@ -282,6 +287,7 @@ public class DCSpindexer {
                             rotateToSlot(nextSlot);
                             state = SpindexerState.ROTATING_TO_OUTTAKE;
                         } else {
+                            requestingOuttake = false;
                             state = SpindexerState.ROTATING_TO_EMPTY;
                         }
                     }
