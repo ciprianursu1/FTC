@@ -84,8 +84,8 @@ public class TeleOpCip extends OpMode {
     private static final double RPM_TOL = 150;
     private static final long RPM_STABLE_MS = 80;
     private static final double TURRET_TOL_DEG = 2.0;
-    private static final double LL_OFFSET_X = 0.0;
-    private static final double LL_OFFSET_Y = 0.0;
+    private static final double LL_OFFSET_X = -65.5/1000;
+    private static final double LL_OFFSET_Y = 181/1000.0;
     private long rpmInRangeSinceMs = 0;
     boolean turretOnTarget = false;
     enum IntakeState{
@@ -156,8 +156,8 @@ public class TeleOpCip extends OpMode {
             pinpoint.setPose(pedroPose);
         }
         YawPitchRollAngles orientation = imu.getRobotYawPitchRollAngles();
-        limelight.updateRobotOrientation(orientation.getYaw());
-        pinpoint.setHeading(orientation.getYaw());
+        limelight.updateRobotOrientation(normalizeAngle(orientation.getYaw() - Math.toDegrees(startPose.getHeading())));
+        pinpoint.setHeading(normalizeAngle(orientation.getYaw(AngleUnit.RADIANS) - startPose.getHeading()));
         Drive();
         if(aimingEnabled || spinner.spindexerFull()) {
             enableLauncher();
@@ -230,18 +230,7 @@ public class TeleOpCip extends OpMode {
         }
 
         // ========== GET ROBOT VELOCITY ==========
-        double robotVx = getRobotVelocityX();
-        double robotVy = getRobotVelocityY();
-
-        // ========== CALCULATE EFFECTIVE DISTANCE WITH MOVEMENT COMPENSATION ==========
-        // Direction to target
-        double dx = targetX - turretX;
-        double dy = targetY - turretY;
-        double targetDirX = dx / rawDistance;
-        double targetDirY = dy / rawDistance;
-
-        // Robot speed toward/away from target
-        double speedTowardTarget = robotVx * targetDirX + robotVy * targetDirY;
+        double speedTowardTarget = getSpeedTowardTarget(rawDistance);
 
         // Estimate flight time (iterative for better accuracy)
         double effectiveDistance = rawDistance;
@@ -351,14 +340,30 @@ public class TeleOpCip extends OpMode {
         flywheelTargetRPM = Math.max(minFlywheelRPM, Math.min(flywheelTargetRPM, maxFlywheelRPM));
         trajectoryAngle = Math.max(minTrajectoryAngle, Math.min(trajectoryAngle, maxTrajectoryAngle));
     }
+
+    private double getSpeedTowardTarget(double rawDistance) {
+        double robotVx = getRobotVelocityX();
+        double robotVy = getRobotVelocityY();
+
+        // ========== CALCULATE EFFECTIVE DISTANCE WITH MOVEMENT COMPENSATION ==========
+        // Direction to target
+        double dx = targetX - turretX;
+        double dy = targetY - turretY;
+        double targetDirX = dx / rawDistance;
+        double targetDirY = dy / rawDistance;
+
+        // Robot speed toward/away from target
+        return robotVx * targetDirX + robotVy * targetDirY;
+    }
+
     private Pose processPedroPose(Pose pedroPose){
         double x = pedroPose.getX();
         double y = pedroPose.getY();
         double heading = pedroPose.getHeading();
         double currentTurretAngle = turret.getCurrentPosition() * TURRET_DEG_PER_TICK + startTurretAngle;
         heading = normalizeAngle(heading - currentTurretAngle);
-        x += Math.cos(heading) * LL_OFFSET_X - Math.sin(heading) * LL_OFFSET_Y;
-        y += Math.sin(heading) * LL_OFFSET_X + Math.cos(heading) * LL_OFFSET_Y;
+        x += (Math.cos(heading) * LL_OFFSET_X - Math.sin(heading) * LL_OFFSET_Y)*INCH_PER_METER;
+        y += (Math.sin(heading) * LL_OFFSET_X + Math.cos(heading) * LL_OFFSET_Y)*INCH_PER_METER;
         x -= (turretOffsetX * Math.cos(heading) - turretOffsetY * Math.sin(heading))*INCH_PER_METER;
         y -= (turretOffsetX * Math.sin(heading) + turretOffsetY * Math.cos(heading))*INCH_PER_METER;
         pedroPose = new Pose(x,y,heading);
@@ -538,6 +543,75 @@ public class TeleOpCip extends OpMode {
         power = Range.clip(power, -MAX_POWER_TURRET, MAX_POWER_TURRET);
         turret.setPower(power);
     }
+//    private void updateTurretAimRunToPosition() {
+//        disableIfNotInLaunchZone();
+//
+//        if(aimingEnabled) {
+//            double robotX = pose.getX();
+//            double robotY = pose.getY();
+//            double robotHeading = pose.getHeading();
+//            double robotHeadingDeg = Math.toDegrees(robotHeading);
+//
+//            // Calculate turret position on field
+//            turretX = robotX + turretOffsetX * Math.cos(robotHeading) - turretOffsetY * Math.sin(robotHeading);
+//            turretY = robotY + turretOffsetX * Math.sin(robotHeading) + turretOffsetY * Math.cos(robotHeading);
+//
+//            // Calculate angle to target
+//            double dx = targetX - turretX;
+//            double dy = targetY - turretY;
+//            double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
+//
+//            // Desired turret angle (relative to robot)
+//            double desiredTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
+//
+//            // Get current position
+//            int currentPosition = turret.getCurrentPosition();
+//            double currentTurretDeg = currentPosition * TURRET_DEG_PER_TICK + startTurretAngle;
+//            currentTurretDeg = normalizeAngle(currentTurretDeg);
+//
+//            // Calculate shortest path error
+//            double error = normalizeAngle(desiredTurretDeg - currentTurretDeg);
+//
+//            // Check if shortest path would hit the limits
+//            double testAngle = normalizeAngle(currentTurretDeg + error/2); // Midpoint of path
+//            boolean pathThroughForbidden = (testAngle < 0 && testAngle > LEFT_LIMIT) ||
+//                    (testAngle >= 0 && testAngle < RIGHT_LIMIT);
+//
+//            if (pathThroughForbidden) {
+//                // Shortest path is forbidden - go the long way around
+//                // Force it to go the opposite direction by setting an intermediate target
+//                if (error > 0) {
+//                    // Wanted to go positive, but that's blocked - go negative instead
+//                    targetTurretDeg = normalizeAngle(currentTurretDeg - 180); // Go 180° the other way
+//                } else {
+//                    // Wanted to go negative, but that's blocked - go positive instead
+//                    targetTurretDeg = normalizeAngle(currentTurretDeg + 180); // Go 180° the other way
+//                }
+//            } else {
+//                // Shortest path is safe
+//                targetTurretDeg = desiredTurretDeg;
+//            }
+//
+//            // Convert target angle to encoder ticks
+//            int targetPosition = (int)((targetTurretDeg - startTurretAngle) / TURRET_DEG_PER_TICK);
+//
+//            // Set the target position
+//            turret.setTargetPosition(targetPosition);
+//
+//            turret.setPower(MAX_POWER_TURRET);
+//
+//        } else {
+//            turret.setPower(0);
+//        }
+//
+//        // Check if on target
+//        int currentPosition = turret.getCurrentPosition();
+//        double currentTurretDeg = currentPosition * TURRET_DEG_PER_TICK + startTurretAngle;
+//        currentTurretDeg = normalizeAngle(currentTurretDeg);
+//
+//        double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
+//        turretOnTarget = (Math.abs(error) <= TURRET_TOL_DEG) && !turret.isBusy();
+//    }
 
 // ========== HELPER FUNCTIONS YOU NEED TO ADD ==========
     Pose velocity;
