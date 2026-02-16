@@ -108,7 +108,8 @@ public class TeleOpCip extends OpMode {
         turret.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
-        spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector");
+        spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
+        spinner.init();
         intake = hardwareMap.get(DcMotorSimple.class, "intake");
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
         front_left = hardwareMap.dcMotor.get("lf");
@@ -148,15 +149,15 @@ public class TeleOpCip extends OpMode {
         limelight.pipelineSwitch(4);
         limelight.start();
     }
-    public void init_loop() {
-        LLResult result = limelight.getLatestResult();
-        if (result != null && result.getFiducialResults() != null) {
-            int tagID = result.getFiducialResults().get(0).getFiducialId();
-            if (tagID == 21 || tagID == 22 || tagID == 23) {
-                spinner.setMotif(tagID);
-            }
-        }
-    }
+//    public void init_loop() {
+//        LLResult result = limelight.getLatestResult();
+//        if (result != null && result.getFiducialResults() != null) {
+//            int tagID = result.getFiducialResults().get(0).getFiducialId();
+//            if (tagID == 21 || tagID == 22 || tagID == 23) {
+//                spinner.setMotif(tagID);
+//            }
+//        }
+//    }
     public void start(){
         limelight.pipelineSwitch(5);
     }
@@ -164,16 +165,16 @@ public class TeleOpCip extends OpMode {
         pinpoint.update();
         pose = pinpoint.getPose();
         velocity = pinpoint.getVelocity();
-        LLResult result = limelight.getLatestResult();
-        if (result != null && result.getBotpose_MT2() != null) {
-            Pose3D LLPose = result.getBotpose_MT2();
-            Pose pedroPose = PoseConverter.pose2DToPose(new Pose2D(DistanceUnit.INCH,LLPose.getPosition().x*INCH_PER_METER,LLPose.getPosition().y*INCH_PER_METER,AngleUnit.DEGREES,LLPose.getOrientation().getYaw()), InvertedFTCCoordinates.INSTANCE);
-            pedroPose = processPedroPose(pedroPose);
-            pinpoint.setPose(pedroPose);
-        }
-        YawPitchRollAngles orientation = imu.getRobotYawPitchRollAngles();
-        limelight.updateRobotOrientation(normalizeAngle(orientation.getYaw() - Math.toDegrees(startPose.getHeading())));
-        pinpoint.setHeading(normalizeAngle(orientation.getYaw(AngleUnit.RADIANS) - startPose.getHeading())); // magnetometru rev
+//        LLResult result = limelight.getLatestResult();
+//        if (result != null && result.getBotpose_MT2() != null) {
+//            Pose3D LLPose = result.getBotpose_MT2();
+//            Pose pedroPose = PoseConverter.pose2DToPose(new Pose2D(DistanceUnit.INCH,LLPose.getPosition().x*INCH_PER_METER,LLPose.getPosition().y*INCH_PER_METER,AngleUnit.DEGREES,LLPose.getOrientation().getYaw()), InvertedFTCCoordinates.INSTANCE);
+//            pedroPose = processPedroPose(pedroPose);
+//            pinpoint.setPose(pedroPose);
+//        }
+//        YawPitchRollAngles orientation = imu.getRobotYawPitchRollAngles();
+////        limelight.updateRobotOrientation(normalizeAngle(orientation.getYaw() - Math.toDegrees(startPose.getHeading())));
+//        pinpoint.setHeading(normalizeAngle(orientation.getYaw(AngleUnit.RADIANS) - startPose.getHeading())); // magnetometru rev
         Drive();
         if(aimingEnabled || spinner.spindexerFull()) {
             enableLauncher();
@@ -203,10 +204,17 @@ public class TeleOpCip extends OpMode {
             spinner.cancelOuttake();
         }
         if(gamepad2.triangleWasPressed() && intakeState != IntakeState.REVERSE){
-            intakeState = intakeState == IntakeState.ON ? IntakeState.OFF : IntakeState.ON;
+            intakeState = IntakeState.ON;
         }
         if(gamepad2.right_trigger > 0.8){
             spinner.requestOuttake();
+        }
+        if(gamepad2.rightBumperWasPressed()){
+            if(intakeState == IntakeState.ON){
+                intakeState = IntakeState.OFF;
+            } else {
+                intakeState = IntakeState.ON;
+            }
         }
         if(gamepad2.cross && intakeState != IntakeState.REVERSE){
             prevIntakeState = intakeState;

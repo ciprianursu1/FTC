@@ -6,10 +6,12 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.NormalizedRGBA;
+import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.SwitchableLight;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 
 import java.util.Arrays;
@@ -17,15 +19,14 @@ import java.util.Arrays;
 public class DCSpindexer {
     final double TICKS_PER_REV = 384.5;
     final double TICKS_PER_120 = TICKS_PER_REV/3.0;
-    final double SPINDEXER_SPEED = 0.3;
+    final double SPINDEXER_SPEED = 0.5;
     final double TRANSFER_UP = 0.02;
     final double TRANSFER_DOWN = 0.255;
-    final double GREEN_MIN = 130;
-    final double GREEN_MAX = 160;
-    final double PURPLE_MIN = 200;
-    final double PURPLE_MAX = 230;
-    final double DISTANCE_THRESHOLD = 40.0;
-    final int CONFIDENCE_THRESHOLD = 3;
+    final double GREEN_MIN = 140;
+    final double GREEN_MAX = 175;
+    final double PURPLE_MIN = 190;
+    final double PURPLE_MAX = 250;
+    final int CONFIDENCE_THRESHOLD = 1;
     private enum ArtifactColor{
         PURPLE,GREEN,EMPTY
     }
@@ -37,8 +38,8 @@ public class DCSpindexer {
         ROTATING_TO_OUTTAKE,
         TRANSFERRING
     }
-    ArtifactColor[] slotColors = new ArtifactColor[3];
-    SpindexerState state = SpindexerState.IDLE;
+    ArtifactColor[] slotColors = {ArtifactColor.EMPTY,ArtifactColor.EMPTY,ArtifactColor.EMPTY};
+    SpindexerState state = SpindexerState.ROTATING_TO_EMPTY;
     int targetPosition = 0;
     double delay = 0;
     boolean transferUp = false;
@@ -49,27 +50,35 @@ public class DCSpindexer {
     int targetSlot = 0;
     int motifIndex = 0;
     public boolean requestingOuttake = false;
+    Telemetry telemetry;
     DcMotorEx spindexer;
     Servo transfer;
     RevColorSensorV3[] colorSensors = new RevColorSensorV3[3];
     int[] purpleConfidence = new int[3];
     int[] greenConfidence = new int[3];
     int[] emptyConfidence = new int[3];
-    ArtifactColor[] motif = new ArtifactColor[3];
+    ArtifactColor[] motif = {ArtifactColor.PURPLE,ArtifactColor.PURPLE,ArtifactColor.GREEN};
     ElapsedTime time = new ElapsedTime();
-    public DCSpindexer(HardwareMap hwMap, String sensor1Name , String sensor2Name, String sensor3Name, String motorName, String servoName){
+    public DCSpindexer(HardwareMap hwMap, String sensor1Name , String sensor2Name, String sensor3Name, String motorName, String servoName, Telemetry telemetry){
         spindexer = hwMap.get(DcMotorEx.class,motorName);
         transfer = hwMap.get(Servo.class,servoName);
         colorSensors[0] = hwMap.get(RevColorSensorV3.class,sensor1Name);
         colorSensors[1] = hwMap.get(RevColorSensorV3.class,sensor2Name);
         colorSensors[2] = hwMap.get(RevColorSensorV3.class,sensor3Name);
+        this.telemetry = telemetry;
     }
     public void init(){
+        for(int i = 0; i < 3; i++) {
+            colorSensors[i].setGain(5);
+        }
         spindexer.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         spindexer.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        spindexer.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,new PIDFCoefficients(15,0,0.25,10));
+        spindexer.setPositionPIDFCoefficients(15);
         spindexer.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         transfer.setDirection(Servo.Direction.REVERSE);
         transfer.setPosition(TRANSFER_DOWN);
+        spindexer.setTargetPositionTolerance(1);
         Arrays.fill(slotColors,ArtifactColor.EMPTY);
         Arrays.fill(purpleConfidence,0);
         Arrays.fill(greenConfidence,0);
@@ -138,9 +147,7 @@ public class DCSpindexer {
         Color.colorToHSV(color.toColor(),hsvValues);
         double h = hsvValues[0];
         double s = hsvValues[1];
-        double v = hsvValues[2];
         if (s < 0.1) return ArtifactColor.EMPTY;
-        else if (v < 0.1) return ArtifactColor.EMPTY;
         if (h > GREEN_MIN && h < GREEN_MAX) return ArtifactColor.GREEN;
         else if (h > PURPLE_MIN && h < PURPLE_MAX) return ArtifactColor.PURPLE;
         else return ArtifactColor.EMPTY;
@@ -157,16 +164,17 @@ public class DCSpindexer {
         else if (delta == 2) moveTicks = -(int) TICKS_PER_120;
 
         targetPosition += moveTicks;
-
+        spindexer.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         spindexer.setTargetPosition(targetPosition);
+        spindexer.setMode(DcMotor.RunMode.RUN_TO_POSITION);
         spindexer.setPower(SPINDEXER_SPEED);
     }
 
     public void update() {
         if (delayActive()) return;
+        sendTelemetry();
         switch (state) {
             case IDLE:
-                spindexer.setPower(0);
                 break;
             case ROTATING_TO_EMPTY:
                 for (RevColorSensorV3 sensor : colorSensors) {
@@ -186,7 +194,6 @@ public class DCSpindexer {
                     }
 
                     if (!spindexer.isBusy()) {
-                        spindexer.setPower(0);
                         rotating = false;
                         currentSlot = targetSlot;
                         state = SpindexerState.WAITING_FOR_OBJECT;
@@ -202,49 +209,54 @@ public class DCSpindexer {
                 }
                 break;
             case CLASSIFYING:
+                // Turn LEDs on
                 for (RevColorSensorV3 sensor : colorSensors) {
                     if (sensor instanceof SwitchableLight) {
                         ((SwitchableLight) sensor).enableLight(true);
                     }
                 }
 
+                boolean classified = false;
+
                 for (int i = 0; i < 3; i++) {
-                    ArtifactColor currentReading = getColor(colorSensors[i]);
+                    ArtifactColor reading = getColor(colorSensors[i]);
 
                     // Update confidence counters
-                    switch (currentReading) {
-                        case PURPLE:
-                            purpleConfidence[i]++;
-                            greenConfidence[i] = 0;
-                            emptyConfidence[i] = 0;
-                            break;
-                        case GREEN:
-                            purpleConfidence[i] = 0;
-                            greenConfidence[i]++;
-                            emptyConfidence[i] = 0;
-                            break;
-                        case EMPTY:
-                            purpleConfidence[i] = 0;
-                            greenConfidence[i] = 0;
-                            emptyConfidence[i]++;
-                            break;
+                    if (reading == ArtifactColor.PURPLE) {
+                        purpleConfidence[i]++;
+                        greenConfidence[i] = 0;
+                        emptyConfidence[i] = 0;
+                    } else if (reading == ArtifactColor.GREEN) {
+                        purpleConfidence[i] = 0;
+                        greenConfidence[i]++;
+                        emptyConfidence[i] = 0;
+                    } else {
+                        purpleConfidence[i] = 0;
+                        greenConfidence[i] = 0;
+                        emptyConfidence[i]++;
                     }
 
-                    // Update slot color if confidence threshold reached
+                    // Check confidence threshold
                     if (purpleConfidence[i] >= CONFIDENCE_THRESHOLD) {
                         slotColors[i] = ArtifactColor.PURPLE;
-                        purpleConfidence[i] = 0; // Reset after confirming
+                        classified = true;
                     } else if (greenConfidence[i] >= CONFIDENCE_THRESHOLD) {
                         slotColors[i] = ArtifactColor.GREEN;
-                        greenConfidence[i] = 0;
+                        classified = true;
                     } else if (emptyConfidence[i] >= CONFIDENCE_THRESHOLD) {
                         slotColors[i] = ArtifactColor.EMPTY;
-                        emptyConfidence[i] = 0;
+                        classified = true;
                     }
                 }
-                if(slotColors[0] != ArtifactColor.EMPTY) {
+
+                // Stay in CLASSIFYING until a color is confirmed
+                if (classified) {
+                    Arrays.fill(purpleConfidence, 0);
+                    Arrays.fill(greenConfidence, 0);
+                    Arrays.fill(emptyConfidence, 0);
                     state = SpindexerState.ROTATING_TO_EMPTY;
                 }
+
                 break;
             case WAITING_FOR_OBJECT:
                 if (colorSensors[0] instanceof SwitchableLight) {
@@ -255,7 +267,7 @@ public class DCSpindexer {
                     Arrays.fill(greenConfidence, 0);
                     Arrays.fill(emptyConfidence, 0);
                 }
-                if (getColor(colorSensors[0]) != ArtifactColor.EMPTY  && colorSensors[0].getDistance(DistanceUnit.MM) < DISTANCE_THRESHOLD){
+                if (getColor(colorSensors[0]) != ArtifactColor.EMPTY){
                     startDelay(150);
                     state = SpindexerState.CLASSIFYING;
                 }
@@ -278,9 +290,6 @@ public class DCSpindexer {
                 } else {
                     transfer.setPosition(TRANSFER_DOWN);
                     startDelay(250);
-                    if (spindexerEmpty()) {
-                        state = SpindexerState.ROTATING_TO_EMPTY;
-                    } else {
                         int nextSlot = findSlotForColor(motif[motifIndex%2 + 1]);
                         motifIndex++;
                         if(nextSlot != -1) {
@@ -292,11 +301,9 @@ public class DCSpindexer {
                             state = SpindexerState.ROTATING_TO_EMPTY;
                         }
                     }
-                }
                 break;
             case ROTATING_TO_OUTTAKE:
                 if (!spindexer.isBusy()) {
-                    spindexer.setPower(0);
                     currentSlot = targetSlot;
                     if(requestingOuttake) {
                         state = SpindexerState.TRANSFERRING;
@@ -306,5 +313,35 @@ public class DCSpindexer {
                 break;
         }
     }
+    private void sendTelemetry() {
+        if (telemetry == null) return;
+
+        telemetry.addLine("=== DC Spindexer ===");
+
+        telemetry.addData("State", state);
+        telemetry.addData("Current Slot", currentSlot);
+        telemetry.addData("Target Slot", targetSlot);
+        telemetry.addData("Motor Target", targetPosition);
+        telemetry.addData("Motor Pos", spindexer.getCurrentPosition());
+        telemetry.addData("Motor Busy", spindexer.isBusy());
+
+        telemetry.addData("Requesting Outtake", requestingOuttake);
+        telemetry.addData("Ready To Shoot", readyToShoot);
+        telemetry.addData("Sorting Enabled", enabledSorting);
+
+        telemetry.addLine("--- Slots ---");
+        for (int i = 0; i < 3; i++) {
+            telemetry.addData(
+                    "Slot " + i,
+                    (slotColors[i] == ArtifactColor.PURPLE ? "PURPLE" : slotColors[i] == ArtifactColor.GREEN ? "GREEN" : "EMPTY")
+            );
+        }
+
+        telemetry.addData("Transfer Servo", transfer.getPosition());
+        telemetry.addData("Delay Active", delayActive());
+
+        telemetry.update();
+    }
+
 
 }

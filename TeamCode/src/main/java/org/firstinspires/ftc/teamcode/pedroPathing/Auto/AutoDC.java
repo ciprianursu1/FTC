@@ -168,7 +168,7 @@ public class AutoDC extends OpMode {
 
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
         trajectoryAngleModifier.setPosition(0);
-        spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector");
+        spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
 
         autoDelay.reset();
 

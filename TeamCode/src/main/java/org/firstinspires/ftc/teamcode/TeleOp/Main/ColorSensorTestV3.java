@@ -53,6 +53,26 @@ public class ColorSensorTestV3 extends LinearOpMode {
             });
         }
     }
+    double GREEN_MAX = 160;
+    double GREEN_MIN = 130;
+    double PURPLE_MAX = 250;
+    double PURPLE_MIN = 190;
+    private enum ArtifactColor{
+        PURPLE,GREEN,EMPTY
+    }
+    private ArtifactColor getColor(RevColorSensorV3 sensor) {
+        NormalizedRGBA color = sensor.getNormalizedColors();
+        float[] hsvValues = new float[3];
+        Color.colorToHSV(color.toColor(),hsvValues);
+        double h = hsvValues[0];
+        double s = hsvValues[1];
+        double v = hsvValues[2];
+        if (s < 0.1) return ArtifactColor.EMPTY;
+        else if (v < 0.1) return ArtifactColor.EMPTY;
+        if (h > GREEN_MIN && h < GREEN_MAX) return ArtifactColor.GREEN;
+        else if (h > PURPLE_MIN && h < PURPLE_MAX) return ArtifactColor.PURPLE;
+        else return ArtifactColor.EMPTY;
+    }
 
     protected void runSample() {
         // You can give the sensor a gain value, will be multiplied by the sensor's raw value before the
@@ -79,7 +99,7 @@ public class ColorSensorTestV3 extends LinearOpMode {
         // Get a reference to our sensor object. It's recommended to use NormalizedColorSensor over
         // ColorSensor, because NormalizedColorSensor consistently gives values between 0 and 1, while
         // the values you get from ColorSensor are dependent on the specific sensor you're using.
-        colorSensor = hardwareMap.get(RevColorSensorV3.class, "Color2");
+        colorSensor = hardwareMap.get(RevColorSensorV3.class, "Color1");
 
         // If possible, turn the light on in the beginning (it might already be on anyway,
         // we just make sure it is if we can).
@@ -146,6 +166,10 @@ public class ColorSensorTestV3 extends LinearOpMode {
                     .addData("Saturation", "%.3f", hsvValues[1])
                     .addData("Value", "%.3f", hsvValues[2]);
             telemetry.addData("Alpha", "%.3f", colors.alpha);
+            telemetry.addData(
+                    "Slot ",
+                    (getColor(colorSensor) == ArtifactColor.PURPLE ? "PURPLE" : getColor(colorSensor) == ArtifactColor.GREEN ? "GREEN" : "EMPTY")
+            );
 
             /* If this color sensor also has a distance sensor, display the measured distance.
              * Note that the reported distance is only useful at very close range, and is impacted by
