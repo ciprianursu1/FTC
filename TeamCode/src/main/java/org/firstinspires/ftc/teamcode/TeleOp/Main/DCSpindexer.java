@@ -288,6 +288,7 @@ public class DCSpindexer {
                             state = SpindexerState.ROTATING_TO_OUTTAKE;
                         } else {
                             requestingOuttake = false;
+                            targetPosition = 0;
                             state = SpindexerState.ROTATING_TO_EMPTY;
                         }
                     }

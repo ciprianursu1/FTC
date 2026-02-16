@@ -59,6 +59,7 @@ public class AutoDC extends OpMode {
     private static final double PARK_IF_REMAIN_S = 2.0;
 
     boolean spinIntake = false;
+    final boolean blue = true;
     private static final double MOTOR_TICKS_PER_REV = 384.5;
     private static final double MOTOR_TO_TURRET_RATIO = 75.0 / 26.0;
     private static final double DEG_PER_TICK_TURETA =
@@ -390,7 +391,7 @@ public class AutoDC extends OpMode {
         double y = pose.getY();
         double heading = pose.getHeading();
 
-        PoseStorage.savePose(hardwareMap.appContext, x, y, heading);
+        PoseStorage.savePose(hardwareMap.appContext, x, y, heading, blue);
     }
     private void updateFlywheel() {
         // Measure RPM

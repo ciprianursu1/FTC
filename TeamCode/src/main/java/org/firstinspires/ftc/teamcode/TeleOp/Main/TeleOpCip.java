@@ -42,8 +42,8 @@ public class TeleOpCip extends OpMode {
     IMU imu;
     static final double INCH_PER_METER = 100/2.54;
     static final double FLYWHEEL_TICKS_PER_REV = 28;
-    static final double targetX = 0;
-    static final double targetY = 144;
+    double targetX = 0;
+    double targetY = 144;
     static final double minFlywheelRPM = 1000;
     static final double maxFlywheelRPM = 6000;
     static final double maxTrajectoryAngle = 70;
@@ -88,6 +88,7 @@ public class TeleOpCip extends OpMode {
     private static final double LL_OFFSET_Y = 181/1000.0;
     private long rpmInRangeSinceMs = 0;
     boolean turretOnTarget = false;
+    boolean blue = true;
     enum IntakeState{
         ON,OFF,REVERSE
     }
@@ -122,7 +123,14 @@ public class TeleOpCip extends OpMode {
 //        double x = pose[0];
 //        double y = pose[1];
 //        double heading = pose[2];
-//
+//        blue = pose[3] == 1;
+//        if(blue){
+//            targetX = 0;
+//            targetY = 144;
+//        } else {
+//            targetX = 144;
+//            targetY = 144;
+//        }
 //        pinpoint.setPose(new Pose(x,y,heading));
 
         front_right.setDirection(DcMotorSimple.Direction.FORWARD);
@@ -165,7 +173,7 @@ public class TeleOpCip extends OpMode {
         }
         YawPitchRollAngles orientation = imu.getRobotYawPitchRollAngles();
         limelight.updateRobotOrientation(normalizeAngle(orientation.getYaw() - Math.toDegrees(startPose.getHeading())));
-        pinpoint.setHeading(normalizeAngle(orientation.getYaw(AngleUnit.RADIANS) - startPose.getHeading()));
+        pinpoint.setHeading(normalizeAngle(orientation.getYaw(AngleUnit.RADIANS) - startPose.getHeading())); // magnetometru rev
         Drive();
         if(aimingEnabled || spinner.spindexerFull()) {
             enableLauncher();
