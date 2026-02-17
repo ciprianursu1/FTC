@@ -19,7 +19,7 @@ import java.util.Arrays;
 public class DCSpindexer {
     final double TICKS_PER_REV = 384.5;
     final double TICKS_PER_120 = TICKS_PER_REV/3.0;
-    final double SPINDEXER_SPEED = 0.5;
+    final double SPINDEXER_SPEED = 0.8;
     final double TRANSFER_UP = 0.02;
     final double TRANSFER_DOWN = 0.255;
     final double GREEN_MIN = 140;
@@ -41,6 +41,7 @@ public class DCSpindexer {
     ArtifactColor[] slotColors = {ArtifactColor.EMPTY,ArtifactColor.EMPTY,ArtifactColor.EMPTY};
     SpindexerState state = SpindexerState.ROTATING_TO_EMPTY;
     int targetPosition = 0;
+    int currentPosition = 0;
     double delay = 0;
     boolean transferUp = false;
     boolean readyToShoot = false;
@@ -49,7 +50,11 @@ public class DCSpindexer {
     int currentSlot = 0;
     int targetSlot = 0;
     int motifIndex = 0;
+    int lastError = 0;
+    final double kP = 0.01;
+    final double kD = 0.0002;
     public boolean requestingOuttake = false;
+    boolean lastDelayActive = false;
     Telemetry telemetry;
     DcMotorEx spindexer;
     Servo transfer;
@@ -59,6 +64,11 @@ public class DCSpindexer {
     int[] emptyConfidence = new int[3];
     ArtifactColor[] motif = {ArtifactColor.PURPLE,ArtifactColor.PURPLE,ArtifactColor.GREEN};
     ElapsedTime time = new ElapsedTime();
+    int busyCounter = 0;
+    final int BUSY_THRESHOLD = 3;
+    ElapsedTime settleTimer = new ElapsedTime();
+    boolean settling = false;
+
     public DCSpindexer(HardwareMap hwMap, String sensor1Name , String sensor2Name, String sensor3Name, String motorName, String servoName, Telemetry telemetry){
         spindexer = hwMap.get(DcMotorEx.class,motorName);
         transfer = hwMap.get(Servo.class,servoName);
@@ -72,9 +82,8 @@ public class DCSpindexer {
             colorSensors[i].setGain(5);
         }
         spindexer.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        spindexer.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        spindexer.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,new PIDFCoefficients(15,0,0.25,10));
-        spindexer.setPositionPIDFCoefficients(15);
+        spindexer.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        spindexer.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         spindexer.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         transfer.setDirection(Servo.Direction.REVERSE);
         transfer.setPosition(TRANSFER_DOWN);
@@ -153,25 +162,55 @@ public class DCSpindexer {
         else return ArtifactColor.EMPTY;
     }
     private void rotateToSlot(int slot) {
-
         targetSlot = slot;
 
         int delta = (targetSlot - currentSlot + 3) % 3;
-
         int moveTicks = 0;
 
         if (delta == 1) moveTicks = (int) TICKS_PER_120;
         else if (delta == 2) moveTicks = -(int) TICKS_PER_120;
 
         targetPosition += moveTicks;
-        spindexer.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        spindexer.setTargetPosition(targetPosition);
-        spindexer.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        spindexer.setPower(SPINDEXER_SPEED);
+
+        rotating = true;
+    }
+    private void updateSpindexerPID(int targetPosition) {
+        currentPosition = spindexer.getCurrentPosition();
+
+        int error = targetPosition - currentPosition;
+
+        int derivative = error - lastError;
+        lastError = error;
+
+        double output =
+                (error * kP) +
+                        (derivative * kD);
+
+        output = Math.max(-SPINDEXER_SPEED, Math.min(SPINDEXER_SPEED, output));
+
+        spindexer.setPower(output);
+    }
+    private static final double POSITION_TOLERANCE = 1;
+    private boolean spindexerAtTarget() {
+        if (delayActive()) return false;
+        return Math.abs(targetPosition - currentPosition) <= POSITION_TOLERANCE;
     }
 
+
     public void update() {
-        if (delayActive()) return;
+        currentPosition = spindexer.getCurrentPosition();
+        boolean delayNow = delayActive();
+
+        if (lastDelayActive && !delayNow) {
+            rotating = false; // allow new movement after delay
+        }
+
+        lastDelayActive = delayNow;
+        if (delayNow){
+            updateSpindexerPID(currentPosition);
+            return;
+        }
+        updateSpindexerPID(targetPosition);
         sendTelemetry();
         switch (state) {
             case IDLE:
@@ -193,13 +232,13 @@ public class DCSpindexer {
                         }
                     }
 
-                    if (!spindexer.isBusy()) {
+                    if (spindexerAtTarget()) {
                         rotating = false;
                         currentSlot = targetSlot;
                         state = SpindexerState.WAITING_FOR_OBJECT;
                     }
                 } else {
-                    targetPosition += (int)(TICKS_PER_REV / 2.0);
+                    targetPosition += (int)(TICKS_PER_REV / 2.0) - 7;
                     int nextSlot = findSlotForColor(motif[0]);
                     if(nextSlot != -1) {
                         rotateToSlot(nextSlot);
@@ -303,7 +342,7 @@ public class DCSpindexer {
                     }
                 break;
             case ROTATING_TO_OUTTAKE:
-                if (!spindexer.isBusy()) {
+                if (spindexerAtTarget()) {
                     currentSlot = targetSlot;
                     if(requestingOuttake) {
                         state = SpindexerState.TRANSFERRING;

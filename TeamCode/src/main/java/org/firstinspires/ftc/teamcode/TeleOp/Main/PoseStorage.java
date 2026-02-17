@@ -10,8 +10,9 @@ public class PoseStorage {
     private static final String KEY_Y = "y";
     private static final String KEY_HEADING = "heading";
     private static final String KEY_ALLIANCE = "alliance";
+    private static final String KEY_MOTIF = "motif";
 
-    public static void savePose(Context context, double x, double y, double heading, boolean alliance) {
+    public static void savePose(Context context, double x, double y, double heading, boolean alliance, int tagIDMotif) {
         SharedPreferences prefs =
                 context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
 
@@ -20,6 +21,7 @@ public class PoseStorage {
                 .putFloat(KEY_Y, (float) y)
                 .putFloat(KEY_HEADING, (float) heading)
                 .putBoolean(KEY_ALLIANCE, alliance) // red / blue
+                .putInt(KEY_MOTIF,tagIDMotif)
                 .apply();
     }
 
@@ -31,7 +33,8 @@ public class PoseStorage {
         double y = prefs.getFloat(KEY_Y, 0);
         double heading = prefs.getFloat(KEY_HEADING, 0);
         boolean alliance = prefs.getBoolean(KEY_ALLIANCE, false); // red / blue
+        int tagIDMotif = prefs.getInt(KEY_MOTIF, 0);
 
-        return new double[]{x, y, heading,alliance ? 1 : 0};
+        return new double[]{x, y, heading,alliance ? 1 : 0, tagIDMotif};
     }
 }

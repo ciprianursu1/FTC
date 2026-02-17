@@ -6,6 +6,7 @@ import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -23,6 +24,8 @@ import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+
+import java.util.List;
 
 @TeleOp (name = "Cip", group = "Alpha")
 public class TeleOpCip extends OpMode {
@@ -92,11 +95,13 @@ public class TeleOpCip extends OpMode {
     enum IntakeState{
         ON,OFF,REVERSE
     }
+    int lastTag = 0;
     IntakeState intakeState = IntakeState.OFF;
     IntakeState prevIntakeState = IntakeState.OFF;
 
 
     public void init() {
+
         turret = hardwareMap.get(DcMotorEx.class, "tureta");
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
         flywheel.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -149,15 +154,19 @@ public class TeleOpCip extends OpMode {
         limelight.pipelineSwitch(4);
         limelight.start();
     }
-//    public void init_loop() {
-//        LLResult result = limelight.getLatestResult();
-//        if (result != null && result.getFiducialResults() != null) {
-//            int tagID = result.getFiducialResults().get(0).getFiducialId();
-//            if (tagID == 21 || tagID == 22 || tagID == 23) {
-//                spinner.setMotif(tagID);
-//            }
-//        }
-//    }
+    public void init_loop() {
+        LLResult result = limelight.getLatestResult();
+        if (result.isValid() && result.getFiducialResults() != null && !result.getFiducialResults().isEmpty()) {
+            int tagID = result.getFiducialResults().get(0).getFiducialId();
+            if ((tagID == 21 || tagID == 22 || tagID == 23) && tagID != lastTag) {
+                spinner.setMotif(tagID);
+                lastTag = tagID;
+                telemetry.addLine("Tag " + tagID + " detected");
+            }
+        } else {
+            telemetry.addLine("No fiducial detected or Limelight not connected");
+        }
+    }
     public void start(){
         limelight.pipelineSwitch(5);
     }
@@ -202,25 +211,25 @@ public class TeleOpCip extends OpMode {
         spinner.update();
         if(gamepad2.circleWasPressed()){
             spinner.cancelOuttake();
-        }
-        if(gamepad2.triangleWasPressed() && intakeState != IntakeState.REVERSE){
-            intakeState = IntakeState.ON;
-        }
-        if(gamepad2.right_trigger > 0.8){
-            spinner.requestOuttake();
-        }
-        if(gamepad2.rightBumperWasPressed()){
             if(intakeState == IntakeState.ON){
                 intakeState = IntakeState.OFF;
             } else {
                 intakeState = IntakeState.ON;
             }
         }
-        if(gamepad2.cross && intakeState != IntakeState.REVERSE){
-            prevIntakeState = intakeState;
-            intakeState = IntakeState.REVERSE;
+        if(gamepad2.right_trigger > 0.8){
+            spinner.requestOuttake();
+        }
+        if (gamepad2.cross) {
+            if (intakeState != IntakeState.REVERSE) {
+                prevIntakeState = intakeState; // remember what we were doing
+                intakeState = IntakeState.REVERSE;
+            }
         } else {
-            intakeState = prevIntakeState;
+            // When cross released, return to previous state if we were reversing
+            if (intakeState == IntakeState.REVERSE) {
+                intakeState = prevIntakeState;
+            }
         }
         if(gamepad2.optionsWasPressed() && gamepad2.shareWasPressed()){
             pinpoint.setPose(startPose);

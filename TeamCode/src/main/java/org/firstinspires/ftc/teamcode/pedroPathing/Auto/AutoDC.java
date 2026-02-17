@@ -391,7 +391,7 @@ public class AutoDC extends OpMode {
         double y = pose.getY();
         double heading = pose.getHeading();
 
-        PoseStorage.savePose(hardwareMap.appContext, x, y, heading, blue);
+        PoseStorage.savePose(hardwareMap.appContext, x, y, heading, blue,21);
     }
     private void updateFlywheel() {
         // Measure RPM
