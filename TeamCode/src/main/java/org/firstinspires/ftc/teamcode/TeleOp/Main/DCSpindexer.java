@@ -238,7 +238,11 @@ public class DCSpindexer {
                         state = SpindexerState.WAITING_FOR_OBJECT;
                     }
                 } else {
-                    targetPosition += (int)(TICKS_PER_REV / 2.0) - 7;
+                    if (spindexerEmpty()) break;
+                    if(rotating) {
+                        targetPosition += (int) (TICKS_PER_REV / 2.0) - 7;
+                        rotating = false;
+                    }
                     int nextSlot = findSlotForColor(motif[0]);
                     if(nextSlot != -1) {
                         rotateToSlot(nextSlot);
