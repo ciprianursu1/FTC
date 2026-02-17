@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.TeleOp.Main;
 import android.graphics.Color;
+import android.graphics.pdf.PdfRenderer;
 
 import com.qualcomm.hardware.rev.RevColorSensorV3;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -64,10 +65,7 @@ public class DCSpindexer {
     int[] emptyConfidence = new int[3];
     ArtifactColor[] motif = {ArtifactColor.PURPLE,ArtifactColor.PURPLE,ArtifactColor.GREEN};
     ElapsedTime time = new ElapsedTime();
-    int busyCounter = 0;
-    final int BUSY_THRESHOLD = 3;
-    ElapsedTime settleTimer = new ElapsedTime();
-    boolean settling = false;
+    boolean preOuttakeOffsetDone = false;
 
     public DCSpindexer(HardwareMap hwMap, String sensor1Name , String sensor2Name, String sensor3Name, String motorName, String servoName, Telemetry telemetry){
         spindexer = hwMap.get(DcMotorEx.class,motorName);
@@ -226,7 +224,6 @@ public class DCSpindexer {
                         for (int i = 0; i < 3; i++) {
                             if (slotColors[i] == ArtifactColor.EMPTY) {
                                 rotateToSlot(i);
-                                rotating = true;
                                 break;
                             }
                         }
@@ -236,17 +233,19 @@ public class DCSpindexer {
                         rotating = false;
                         currentSlot = targetSlot;
                         state = SpindexerState.WAITING_FOR_OBJECT;
+                        preOuttakeOffsetDone = false;
                     }
                 } else {
                     if (spindexerEmpty()) break;
-                    if(rotating) {
+                    if(!preOuttakeOffsetDone) {
                         targetPosition += (int) (TICKS_PER_REV / 2.0) - 7;
-                        rotating = false;
+                        preOuttakeOffsetDone = true;
                     }
                     int nextSlot = findSlotForColor(motif[0]);
                     if(nextSlot != -1) {
                         rotateToSlot(nextSlot);
                         state = SpindexerState.ROTATING_TO_OUTTAKE;
+                        preOuttakeOffsetDone = false;
                     }
 
                 }
@@ -317,6 +316,7 @@ public class DCSpindexer {
                 break;
             case TRANSFERRING:
                 if(!requestingOuttake) {
+                    targetPosition = 0;
                     state = SpindexerState.ROTATING_TO_EMPTY;
                     if(transferUp){
                         transfer.setPosition(TRANSFER_DOWN);
@@ -347,6 +347,7 @@ public class DCSpindexer {
                 break;
             case ROTATING_TO_OUTTAKE:
                 if (spindexerAtTarget()) {
+                    rotating = false;
                     currentSlot = targetSlot;
                     if(requestingOuttake) {
                         state = SpindexerState.TRANSFERRING;
