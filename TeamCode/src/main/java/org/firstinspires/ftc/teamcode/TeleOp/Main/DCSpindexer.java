@@ -184,13 +184,13 @@ public class DCSpindexer {
         int moveTicks = 0;
 
         if (delta == 1) {
-            moveTicks = (int) TICKS_PER_120;
+            moveTicks = -(int) TICKS_PER_120;
 //            if(state == SpindexerState.ROTATING_TO_EMPTY || state == SpindexerState.CLASSIFYING) {
 //                shiftSlotsRight(1);
 //            }
         }
         else if (delta == 2) {
-            moveTicks = -(int) TICKS_PER_120;
+            moveTicks = (int) TICKS_PER_120;
 //            if(state == SpindexerState.ROTATING_TO_EMPTY || state == SpindexerState.CLASSIFYING) {
 //                shiftSlotsLeft(1);
 //            }
