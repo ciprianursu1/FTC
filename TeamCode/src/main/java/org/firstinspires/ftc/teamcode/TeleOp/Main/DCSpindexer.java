@@ -159,23 +159,23 @@ public class DCSpindexer {
         else if (h > PURPLE_MIN && h < PURPLE_MAX) return ArtifactColor.PURPLE;
         else return ArtifactColor.EMPTY;
     }
-    private void shiftSlotsRight(int times) {
-        for (int t = 0; t < times; t++) {
-            ArtifactColor temp = slotColors[2];
-            slotColors[2] = slotColors[1];
-            slotColors[1] = slotColors[0];
-            slotColors[0] = temp;
-        }
-    }
-
-    private void shiftSlotsLeft(int times) {
-        for (int t = 0; t < times; t++) {
-            ArtifactColor temp = slotColors[0];
-            slotColors[0] = slotColors[1];
-            slotColors[1] = slotColors[2];
-            slotColors[2] = temp;
-        }
-    }
+//    private void shiftSlotsRight(int times) {
+//        for (int t = 0; t < times; t++) {
+//            ArtifactColor temp = slotColors[2];
+//            slotColors[2] = slotColors[1];
+//            slotColors[1] = slotColors[0];
+//            slotColors[0] = temp;
+//        }
+//    }
+//
+//    private void shiftSlotsLeft(int times) {
+//        for (int t = 0; t < times; t++) {
+//            ArtifactColor temp = slotColors[0];
+//            slotColors[0] = slotColors[1];
+//            slotColors[1] = slotColors[2];
+//            slotColors[2] = temp;
+//        }
+//    }
 
     private void rotateToSlot(int slot) {
         targetSlot = slot;
@@ -185,15 +185,9 @@ public class DCSpindexer {
 
         if (delta == 1) {
             moveTicks = -(int) TICKS_PER_120;
-//            if(state == SpindexerState.ROTATING_TO_EMPTY || state == SpindexerState.CLASSIFYING) {
-//                shiftSlotsRight(1);
-//            }
         }
         else if (delta == 2) {
             moveTicks = (int) TICKS_PER_120;
-//            if(state == SpindexerState.ROTATING_TO_EMPTY || state == SpindexerState.CLASSIFYING) {
-//                shiftSlotsLeft(1);
-//            }
         }
 
         targetPosition += moveTicks;
