@@ -22,7 +22,7 @@ public class DCSpindexer {
     final double TICKS_PER_120 = TICKS_PER_REV/3.0;
     final double SPINDEXER_SPEED = 0.8;
     final double TRANSFER_UP = 0.02;
-    final double TRANSFER_DOWN = 0.255;
+    final double TRANSFER_DOWN = 0.26;
     final double GREEN_MIN = 140;
     final double GREEN_MAX = 175;
     final double PURPLE_MIN = 190;
@@ -159,14 +159,42 @@ public class DCSpindexer {
         else if (h > PURPLE_MIN && h < PURPLE_MAX) return ArtifactColor.PURPLE;
         else return ArtifactColor.EMPTY;
     }
+    private void shiftSlotsRight(int times) {
+        for (int t = 0; t < times; t++) {
+            ArtifactColor temp = slotColors[2];
+            slotColors[2] = slotColors[1];
+            slotColors[1] = slotColors[0];
+            slotColors[0] = temp;
+        }
+    }
+
+    private void shiftSlotsLeft(int times) {
+        for (int t = 0; t < times; t++) {
+            ArtifactColor temp = slotColors[0];
+            slotColors[0] = slotColors[1];
+            slotColors[1] = slotColors[2];
+            slotColors[2] = temp;
+        }
+    }
+
     private void rotateToSlot(int slot) {
         targetSlot = slot;
 
         int delta = (targetSlot - currentSlot + 3) % 3;
         int moveTicks = 0;
 
-        if (delta == 1) moveTicks = (int) TICKS_PER_120;
-        else if (delta == 2) moveTicks = -(int) TICKS_PER_120;
+        if (delta == 1) {
+            moveTicks = (int) TICKS_PER_120;
+//            if(state == SpindexerState.ROTATING_TO_EMPTY || state == SpindexerState.CLASSIFYING) {
+//                shiftSlotsRight(1);
+//            }
+        }
+        else if (delta == 2) {
+            moveTicks = -(int) TICKS_PER_120;
+//            if(state == SpindexerState.ROTATING_TO_EMPTY || state == SpindexerState.CLASSIFYING) {
+//                shiftSlotsLeft(1);
+//            }
+        }
 
         targetPosition += moveTicks;
 
@@ -189,9 +217,19 @@ public class DCSpindexer {
         spindexer.setPower(output);
     }
     private static final double POSITION_TOLERANCE = 1;
+    int notBusyConfidence = 0;
+    final int BUSY_THRESHOLD = 3;
     private boolean spindexerAtTarget() {
-        if (delayActive()) return false;
-        return Math.abs(targetPosition - currentPosition) <= POSITION_TOLERANCE;
+        if (delayActive()){
+            notBusyConfidence = 0;
+            return false;
+        }
+        if (Math.abs(targetPosition - currentPosition) > POSITION_TOLERANCE){
+            notBusyConfidence = 0;
+            return false;
+        }
+        notBusyConfidence++;
+        return notBusyConfidence > BUSY_THRESHOLD;
     }
 
 
@@ -219,7 +257,7 @@ public class DCSpindexer {
                         ((SwitchableLight) sensor).enableLight(false);
                     }
                 }
-                if(!spindexerFull() && !requestingOuttake) {
+                if(!requestingOuttake) {
                     if (!rotating) {
                         for (int i = 0; i < 3; i++) {
                             if (slotColors[i] == ArtifactColor.EMPTY) {
@@ -238,7 +276,7 @@ public class DCSpindexer {
                 } else {
                     if (spindexerEmpty()) break;
                     if(!preOuttakeOffsetDone) {
-                        targetPosition += (int) (TICKS_PER_REV / 2.0) - 7;
+                        targetPosition += (int) (TICKS_PER_REV / 2.0) - 9;
                         preOuttakeOffsetDone = true;
                     }
                     int nextSlot = findSlotForColor(motif[0]);
@@ -296,26 +334,32 @@ public class DCSpindexer {
                     Arrays.fill(purpleConfidence, 0);
                     Arrays.fill(greenConfidence, 0);
                     Arrays.fill(emptyConfidence, 0);
-                    state = SpindexerState.ROTATING_TO_EMPTY;
+                    if(slotColors[0] != ArtifactColor.EMPTY) {
+                        state = SpindexerState.ROTATING_TO_EMPTY;
+                    }
+                }
+                if(requestingOuttake){
+                    if (spindexerEmpty()) break;
+                    if(!preOuttakeOffsetDone) {
+                        targetPosition += (int) (TICKS_PER_REV / 2.0) - 9;
+                        preOuttakeOffsetDone = true;
+                    }
+                    motifIndex = 0;
+                    int nextSlot = findSlotForColor(motif[0]);
+                    if(nextSlot != -1) {
+                        rotateToSlot(nextSlot);
+                        state = SpindexerState.ROTATING_TO_OUTTAKE;
+                        preOuttakeOffsetDone = false;
+                    }
                 }
 
                 break;
             case WAITING_FOR_OBJECT:
-                if (colorSensors[0] instanceof SwitchableLight) {
-                    ((SwitchableLight) colorSensors[0]).enableLight(true);
-                }
-                if (purpleConfidence[0] != 0 || greenConfidence[0] != 0 || emptyConfidence[0] != 0) {
-                    Arrays.fill(purpleConfidence, 0);
-                    Arrays.fill(greenConfidence, 0);
-                    Arrays.fill(emptyConfidence, 0);
-                }
-                if (getColor(colorSensors[0]) != ArtifactColor.EMPTY){
-                    startDelay(150);
-                    state = SpindexerState.CLASSIFYING;
-                }
+                state = SpindexerState.CLASSIFYING;
                 break;
             case TRANSFERRING:
                 if(!requestingOuttake) {
+                    currentSlot = 0;
                     targetPosition = 0;
                     state = SpindexerState.ROTATING_TO_EMPTY;
                     if(transferUp){

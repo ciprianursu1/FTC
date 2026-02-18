@@ -84,14 +84,19 @@ public class TeleOpCip extends OpMode {
     double flywheelTargetRPM = 0;
     double rpm = 0.0;
     double trajectoryAngle = 70;
-    private static final double RPM_TOL = 150;
-    private static final long RPM_STABLE_MS = 80;
+    private static final double RPM_TOL = 50;
+    private static final long RPM_STABLE_MS = 150;
     private static final double TURRET_TOL_DEG = 2.0;
     private static final double LL_OFFSET_X = -65.5/1000;
     private static final double LL_OFFSET_Y = 181/1000.0;
     private long rpmInRangeSinceMs = 0;
     boolean turretOnTarget = false;
     boolean blue = true;
+    public static double kP_v = 30.0;     // try 20–35
+    public static double kI_v = 0.0;      // keep 0 for fastest transient
+    public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
+    // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
+    public static double kF_v = 14.0;
     enum IntakeState{
         ON,OFF,REVERSE
     }
@@ -191,7 +196,7 @@ public class TeleOpCip extends OpMode {
         } else {
             disableLauncher();
         }
-        updateLauncher();
+        updateFlywheel();
         updateTrajectoryAngle();
         updateTurretAim();
         switch (intakeState){
@@ -646,7 +651,7 @@ public class TeleOpCip extends OpMode {
 //        turretOnTarget = (Math.abs(error) <= TURRET_TOL_DEG) && !turret.isBusy();
 //    }
 
-// ========== HELPER FUNCTIONS YOU NEED TO ADD ==========
+    // ========== HELPER FUNCTIONS YOU NEED TO ADD ==========
     Pose velocity;
 
     private double getRobotVelocityX() {
@@ -718,6 +723,47 @@ public class TeleOpCip extends OpMode {
         flywheel.setVelocity(ticksPerSecond);
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
     }
+    private void updateFlywheel() {
+        // Measure RPM
+        rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
+
+        double target = flywheelTargetRPM;
+
+        // Convert target to ticks/sec for RUN_USING_ENCODER velocity
+        double targetTPS = target * FLYWHEEL_TICKS_PER_REV / 60.0;
+
+        // === Control policy ===
+        // In-band (±100rpm): PID velocity hold
+        // Below band: full power 1.0
+        // Above band: power 0.0
+        if (Math.abs(rpm - target) <= RPM_TOL) {
+            // PID HOLD
+            if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
+                flywheel.setPower(0); // clear any open-loop command
+                flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            }
+            flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_v);
+            flywheel.setVelocity(targetTPS);
+        } else if (rpm < (target - RPM_TOL)) {
+            // KICK UP FAST
+            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
+                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            }
+            flywheel.setPower(1.0);
+        } else {
+            // TOO FAST -> CUT POWER
+            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
+                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            }
+            flywheel.setPower(0.0);
+        }
+
+        // Refresh rpm after command (optional but nice for telemetry stability)
+        rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
+    }
+
+
+
 
     private void updateTrajectoryAngle(){
         setTrajectoryAngle(trajectoryAngle);

@@ -71,7 +71,7 @@ public class Shooter {
     public void init() {
         flywheel.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         flywheel.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
-        flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, new PIDFCoefficients(14, 2.3, 4, 14.0));
+        flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, new PIDFCoefficients(30, 2.3, 4, 14.0));
         turret.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         turret.setMode(DcMotorEx.RunMode.RUN_TO_POSITION);
         turret.setPIDFCoefficients(DcMotor.RunMode.RUN_TO_POSITION, new PIDFCoefficients(5, 0, 0, 5));
@@ -268,9 +268,7 @@ public class Shooter {
         } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
             targetTurretDeg = RIGHT_LIMIT;
         }
-        double targetPosition = targetTurretDeg / TURRET_DEG_PER_TICK - startTurretAngle;
-        double currentPosition = turret.getCurrentPosition() * TURRET_DEG_PER_TICK;
-        double error = targetPosition - currentPosition;
+        double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
         double derivative = error - lastError;
         lastError = error;
         double power = error * kP + derivative * kD;
