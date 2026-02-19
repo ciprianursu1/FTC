@@ -56,7 +56,7 @@ public class TeleOpCipShooter extends OpMode {
 
     public void init() {
         shooter = new Shooter(hardwareMap,"flywheel","tureta","unghituretaoy");
-        shooter.init();
+        shooter.init(telemetry);
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
         spinner.init();
         intake = hardwareMap.get(DcMotorSimple.class, "intake");

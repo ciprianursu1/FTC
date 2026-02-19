@@ -8,12 +8,15 @@ import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.Range;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
 public class Shooter {
     DcMotorEx flywheel;
     DcMotorEx turret;
     Servo trajectoryAngleModifier;
     Pose pose;
     Pose velocity;
+    Telemetry telemetry;
     final double maxTrajectoryAngle = 70;
     final double minTrajectoryAngle = 50;
     static final double FLYWHEEL_TICKS_PER_REV = 28;
@@ -70,13 +73,14 @@ public class Shooter {
         turret = hwMap.get(DcMotorEx.class,turretName);
         trajectoryAngleModifier = hwMap.get(Servo.class,servoName);
     }
-    public void init() {
+    public void init(Telemetry telemetry) {
         flywheel.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         flywheel.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
         flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, new PIDFCoefficients(30, 2.3, 4, 14.0));
         turret.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         turret.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         turret.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        this.telemetry = telemetry;
     }
     public void update(Pose pose,Pose velocity, double targetX, double targetY){
         this.targetX = targetX;
@@ -90,6 +94,7 @@ public class Shooter {
             computeParameters();
             updateTrajectoryAngle();
         }
+        updateTelemetry();
     }
     private void updateTrajectoryAngle(){
         setTrajectoryAngle(trajectoryAngle);
@@ -356,7 +361,7 @@ public class Shooter {
         } else {
             targetTurretDeg = startTurretAngle;
         }
-
+        // PANA AICI TOT CODUL FUNCTIONEAZA
         // ----- Current turret angle (from encoder) -----
         double currentTurretTicks = turret.getCurrentPosition();
         double currentTurretDeg = currentTurretTicks / TICKS_PER_DEGREE;
@@ -493,4 +498,32 @@ public class Shooter {
     public void disableAiming(){
         aimingEnabled = false;
     }
+    private void updateTelemetry() {
+        if (telemetry == null) return;
+
+        telemetry.addLine("=== Shooter ===");
+
+        // --- Flywheel ---
+        telemetry.addData("Flywheel RPM", "%.0f / %.0f", rpm, flywheelTargetRPM);
+        telemetry.addData("RPM In Range", isRPMInRange());
+
+        // --- Trajectory ---
+        telemetry.addData("Trajectory Angle (deg)", "%.1f", trajectoryAngle);
+        telemetry.addData("Launch Enabled", launcherEnabled);
+
+        // --- Turret ---
+        telemetry.addData("Turret Angle (deg)", "%.1f", currentTurretDeg);
+        telemetry.addData("Turret On Target", turretOnTarget);
+
+        // --- Target ---
+        telemetry.addData("Target X/Y", "%.1f , %.1f", targetX, targetY);
+
+        // --- Robot ---
+        telemetry.addData("Robot X/Y", "%.1f , %.1f", pose.getX(), pose.getY());
+        telemetry.addData("Robot Heading (deg)", "%.1f", Math.toDegrees(pose.getHeading()));
+        telemetry.addData("Robot Vel X/Y", "%.2f , %.2f", velocity.getX(), velocity.getY());
+
+        telemetry.update();
+    }
+
 }

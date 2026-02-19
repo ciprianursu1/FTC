@@ -23,7 +23,6 @@ public class LimelightPosTest extends LinearOpMode {
 
     Limelight3A limelight;
     PinpointLocalizer pinpoint;
-    IMU imu;
     Pose startPose;
     Pose currentPose;
     boolean limelightCorrectionMode = true;
@@ -38,11 +37,9 @@ public class LimelightPosTest extends LinearOpMode {
     public void runOpMode() throws InterruptedException {
 
         limelight = hardwareMap.get(Limelight3A.class,"limelight");
-        imu = hardwareMap.get(IMU.class,"imu");
         pinpoint = new PinpointLocalizer(hardwareMap, localizerConstants); // use real constants if available
-
         startPose = new Pose(64.3, 15.74/2.0, Math.toRadians(90));
-        pinpoint.setPose(startPose);
+        pinpoint.setStartPose(startPose);
 
         limelight.pipelineSwitch(5);
         limelight.start();
@@ -54,7 +51,7 @@ public class LimelightPosTest extends LinearOpMode {
             // Update Pedro pose
             pinpoint.update();
             currentPose = pinpoint.getPose();
-
+            limelight.updateRobotOrientation(Math.toDegrees(currentPose.getHeading()));
             // Limelight-based correction
             if(limelightCorrectionMode) {
                 LLResult result = limelight.getLatestResult();
@@ -73,14 +70,8 @@ public class LimelightPosTest extends LinearOpMode {
                     );
 
                     pedroPose = processPedroPose(pedroPose);
-                    pinpoint.setPose(pedroPose);
                     currentPose = pedroPose;
                 }
-
-                // IMU heading correction
-                YawPitchRollAngles orientation = imu.getRobotYawPitchRollAngles();
-                double correctedYaw = normalizeAngle(orientation.getYaw(AngleUnit.DEGREES) - Math.toDegrees(startPose.getHeading()));
-                pinpoint.setHeading(correctedYaw);
             }
 
             // Telemetry
@@ -92,8 +83,7 @@ public class LimelightPosTest extends LinearOpMode {
             } else {
                 telemetry.addLine("Pedro Pose: NULL");
             }
-            telemetry.addData("IMU Yaw (deg)", imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES));
-            telemetry.addData("Pinpoint Heading (deg)", pinpoint.getPose().getHeading());
+            telemetry.addData("pinpoint heading",pinpoint.getPose().getHeading());
             telemetry.update();
 
             sleep(50);
