@@ -169,7 +169,7 @@ public class AutoDC extends OpMode {
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
         trajectoryAngleModifier.setPosition(0);
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
-
+        spinner.init();
         autoDelay.reset();
 
         // Start state
@@ -191,13 +191,14 @@ public class AutoDC extends OpMode {
             resetTimer = false;
         }
         follower.update();
+        pose = follower.getPose();
         updateFlywheel();
         spinner.update();
         updateTurretAim();
         if(spinner.requestingOuttake){
             spinner.setReady(turretOnTarget && rpmInRangeStable());
         }
-        pose = follower.getPose();
+
 
         double remain = AUTO_TOTAL_S - autoDelay.seconds();
         if (remain <= PARK_IF_REMAIN_S && stage < 11) {

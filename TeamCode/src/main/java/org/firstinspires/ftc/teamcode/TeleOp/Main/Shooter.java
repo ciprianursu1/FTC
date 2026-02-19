@@ -319,109 +319,77 @@ public class Shooter {
 //        power = Range.clip(power, -MAX_POWER_TURRET, MAX_POWER_TURRET);
 //        turret.setPower(power);
 //    }
-
+double targetTurretDeg = 0;
     private void updateTurretAim() {
         disableIfNotInLaunchZone();
-
         double targetTurretDeg;
-
-        if (aimingEnabled) {
-            // ----- Robot pose -----
+        double currentTurretDeg;
+        if(aimingEnabled) {
             double robotX = pose.getX();
             double robotY = pose.getY();
             double robotHeading = pose.getHeading();
             double robotHeadingDeg = Math.toDegrees(robotHeading);
+            turretX = robotX + turretOffsetX * Math.cos(robotHeading) - turretOffsetY * Math.sin(robotHeading);
+            turretY = robotY + turretOffsetX * Math.sin(robotHeading) + turretOffsetY * Math.cos(robotHeading);
+            double dx = targetX - turretX;
+            double dy = targetY - turretY;
 
-            // ----- Prediction -----
-            double timeToShot = estimateTimeToShot();
-            double futureRobotX = robotX + velocity.getX() * timeToShot;
-            double futureRobotY = robotY + velocity.getY() * timeToShot;
-
-            // ----- Turret offset -----
-            double futureTurretX =
-                    futureRobotX
-                            + turretOffsetX * Math.cos(robotHeading)
-                            - turretOffsetY * Math.sin(robotHeading);
-
-            double futureTurretY =
-                    futureRobotY
-                            + turretOffsetX * Math.sin(robotHeading)
-                            + turretOffsetY * Math.cos(robotHeading);
-
-            // ----- Target vector -----
-            double dxTarget = targetX - futureTurretX;
-            double dyTarget = targetY - futureTurretY;
-
-            double fieldAngle = Math.toDegrees(Math.atan2(dyTarget, dxTarget));
-
-            // Convert field → turret frame
+            double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
+            currentTurretDeg = turret.getCurrentPosition() * TURRET_DEG_PER_TICK + startTurretAngle;
             targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
-            double[] compensation = computeVelocityCompensation();
-            targetTurretDeg = normalizeAngle(targetTurretDeg + compensation[0]);
         } else {
+            currentTurretDeg = turret.getCurrentPosition() * TURRET_DEG_PER_TICK + startTurretAngle;
             targetTurretDeg = startTurretAngle;
         }
-        // PANA AICI TOT CODUL FUNCTIONEAZA
-        // ----- Current turret angle (from encoder) -----
-        double currentTurretTicks = turret.getCurrentPosition();
-        double currentTurretDeg = currentTurretTicks / TICKS_PER_DEGREE;
-
-        // ----- Angle-space error -----
-        double angleError = normalizeAngle(targetTurretDeg - currentTurretDeg);
-
-        // ----- Forbidden angle handling -----
-        if (shortestPathCrossesForbidden(
-                currentTurretDeg,
-                targetTurretDeg
-        )) {
-
-            if (angleError > 0) {
-                angleError -= 360;
-            } else {
-                angleError += 360;
-            }
+        currentTurretDeg=normalizeAngle(currentTurretDeg);
+        if(targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT){
+            targetTurretDeg = LEFT_LIMIT;
+        } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
+            targetTurretDeg = RIGHT_LIMIT;
         }
 
-        // ----- Convert to ticks -----
-        double errorTicks = angleError * TICKS_PER_DEGREE;
+        double error = normalizeAngle(targetTurretDeg - currentTurretDeg)/TURRET_DEG_PER_TICK;
 
-        // ----- PID in ticks -----
-        double derivative = errorTicks - lastError;
-        lastError = errorTicks;
-
-        double power = errorTicks * kP + derivative * kD;
-
-        turretOnTarget =
-                Math.abs(errorTicks) <= (TURRET_TOL);
-
+        double power = error * kP;
+        turretOnTarget = Math.abs(error) <= TURRET_TOL;
         power = Range.clip(power, -MAX_POWER_TURRET, MAX_POWER_TURRET);
         turret.setPower(power);
     }
-    private boolean shortestPathCrossesForbidden(double from, double to) {
-        double delta = normalizeAngle(to - from);
-        double step = Math.signum(delta);
+    private double computeSafeTurretError(double from, double to) {
+        double error = normalizeAngle(to - from);
 
-        double current = from;
-        double remaining = Math.abs(delta);
-
-        while (remaining > 0) {
-            double next = normalizeAngle(current + step);
-            if (crosses(current, next)) {
-                return true;
+        // Check if shortest path crosses forbidden zone
+        if (crossesForbidden(from, to)) {
+            // Reverse rotation direction to avoid forbidden zone
+            if (error > 0) {
+                error = error - 360;
+            } else {
+                error = error + 360;
             }
-            current = next;
-            remaining -= 1.0;
         }
-        return false;
+
+        return error;
     }
 
-    private boolean crosses(double a, double b) {
-        if (a <= b) {
-            return FORBIDDEN_ANGLE >= a && FORBIDDEN_ANGLE <= b;
-        } else {
-            return FORBIDDEN_ANGLE >= a || FORBIDDEN_ANGLE <= b;
+    private boolean crossesForbidden(double a, double b) {
+        // Handles modular 360° forbidden check
+        double start = normalizeAngle(a);
+        double end = normalizeAngle(b);
+        double forbiddenStart = -70;
+        double forbiddenEnd = -30;
+
+        // Normalize forbidden range to 0-360
+        forbiddenStart = normalizeAngle(forbiddenStart);
+        forbiddenEnd = normalizeAngle(forbiddenEnd);
+
+        if (forbiddenStart < forbiddenEnd) {
+            return (start < forbiddenEnd && end > forbiddenStart &&
+                    (start < forbiddenStart || end > forbiddenEnd || start > end));
+        } else { // forbidden zone wraps around
+            return (start > forbiddenStart || end < forbiddenEnd);
         }
     }
+
     public double getCurrentTurretDeg(){
         return currentTurretDeg;
     }
@@ -522,8 +490,7 @@ public class Shooter {
         telemetry.addData("Robot X/Y", "%.1f , %.1f", pose.getX(), pose.getY());
         telemetry.addData("Robot Heading (deg)", "%.1f", Math.toDegrees(pose.getHeading()));
         telemetry.addData("Robot Vel X/Y", "%.2f , %.2f", velocity.getX(), velocity.getY());
-
-        telemetry.update();
+        telemetry.addData("Target",targetTurretDeg);
     }
 
 }

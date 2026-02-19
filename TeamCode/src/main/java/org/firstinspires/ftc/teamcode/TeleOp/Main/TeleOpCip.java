@@ -245,6 +245,7 @@ public class TeleOpCip extends OpMode {
             gamepad2.rumbleBlips(spinner.enabledSorting ? 2 : 1);
         }
         limelightCorrectionMode = gamepad2.left_trigger > 0.5;
+        telemetry.update();
     }
     private boolean rpmInRangeStable() {
         boolean inRange = (rpm >= (flywheelTargetRPM - RPM_TOL)) && (rpm <= (flywheelTargetRPM + RPM_TOL));

@@ -225,7 +225,11 @@ public class DCSpindexer {
         notBusyConfidence++;
         return notBusyConfidence > BUSY_THRESHOLD;
     }
-
+    public void updateInventory(){
+        for (int i = 0; i < 3; i++) {
+            slotColors[i] = getColor(colorSensors[i]);
+        }
+    }
 
     public void update() {
         currentPosition = spindexer.getCurrentPosition();
@@ -445,8 +449,6 @@ public class DCSpindexer {
 
         telemetry.addData("Transfer Servo", transfer.getPosition());
         telemetry.addData("Delay Active", delayActive());
-
-        telemetry.update();
     }
 
 
