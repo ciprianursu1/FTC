@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.pedroPathing.Auto;
 
+import com.qualcomm.hardware.limelightvision.LLResult;
+import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.hardware.*;
@@ -13,8 +15,8 @@ import com.pedropathing.paths.PathChain;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.util.Range;
 
-@Autonomous(name = "auto9BlueFarDC", group = "Test")
-public class AutoDC extends OpMode {
+@Autonomous(name = "auto12BlueFCloseDC", group = "Test")
+public class Auto12BlueClose extends OpMode {
 
 
     /* ===================== PEDRO ===================== */
@@ -36,17 +38,18 @@ public class AutoDC extends OpMode {
     Servo trajectoryAngleModifier;
     VoltageSensor batteryVoltage;
     DCSpindexer spinner;
+    Limelight3A limelight;
 
 
     /* ===================== FLYWHEEL (PIDF VELOCITY) ===================== */
     static final double FLYWHEEL_TICKS_PER_REV = 28.0*1.4;
 
     // imported from TeleOp shooter
-    public static double TARGET_RPM = 3050 ;
+    public static double TARGET_RPM = 2350 ;
     // Start aggressive; tune after you get fast spin-up
-    public static double kP_v = 30.0;     // try 20–35
-    public static double kI_v = 0.0;      // keep 0 for fastest transient
-    public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
+    public static double kP_v = 50;     // try 20–35
+    public static double kI_v = 0;      // keep 0 for fastest transient
+    public static double kD_v = 0.5;      // add small later only if it overshoots/oscillates
 
     // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
     public static double kF_v = 14.0;     // try 12.0–14.0
@@ -76,10 +79,11 @@ public class AutoDC extends OpMode {
     double targetY = 144;
     double turretX = 0.0;
     double turretY = 0.0;
+    int tagID = 0;
     private static final double TURRET_TOL_DEG = 2.0;   // allowed error
     private boolean turretOnTarget = false;
-    private static final double RPM_TOL = 75.0;
-    private static final long RPM_STABLE_MS = 80;   // 40–80ms is fine in auto
+    private static final double RPM_TOL = 70;
+    private static final long RPM_STABLE_MS = 0;   // 40–80ms is fine in auto
     private long rpmInRangeSinceMs = 0;
     private Pose pose;
     boolean aimingEnabled = true;
@@ -151,7 +155,7 @@ public class AutoDC extends OpMode {
     public void init() {
 
         follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(56, 8, Math.toRadians(90)));
+        follower.setStartingPose(new Pose(22, 125, Math.toRadians(325)));
         paths = new Paths(follower);
         intake = hardwareMap.get(DcMotor.class, "intake");
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
@@ -161,7 +165,7 @@ public class AutoDC extends OpMode {
         tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         batteryVoltage = hardwareMap.voltageSensor.iterator().next();
-
+        limelight = hardwareMap.get(Limelight3A.class, "limelight");
         // you had REVERSE in your code
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
 
@@ -177,7 +181,8 @@ public class AutoDC extends OpMode {
         pathStarted = false;
         spinIntake = true;
         rpmInRangeSinceMs = 0;
-
+        limelight.start();
+        limelight.pipelineSwitch(4);
         waiting = false;
 
     }
@@ -201,33 +206,49 @@ public class AutoDC extends OpMode {
 
 
         double remain = AUTO_TOTAL_S - autoDelay.seconds();
-        if (remain <= PARK_IF_REMAIN_S && stage < 11) {
+        if (remain <= PARK_IF_REMAIN_S && stage < 15) {
             // force park ASAP
             abortOuttakeNow();
-            stage = 11;
+            stage = 15;
             pathStarted = false;     // so case 11 will start the park path immediately
         }
-
+        telemetry.addData("RPM",rpm);
+        telemetry.update();
         switch (stage) {
 
             // ================== INITIAL POSITION ==================
             case 0:
+                targetX = 72;
+                targetY = 144;
                 if (spinner.requestingOuttake) break;
                 if (!pathStarted) {
                     spinner.updateInventory();
-                    follower.followPath(paths.Path0, 1, true);
+                    follower.followPath(paths.Path1, 1, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
-                    pathStarted = false;
-                    stage = 1;
+                    LLResult result = limelight.getLatestResult();
+                    if (result.isValid() && result.getFiducialResults() != null && !result.getFiducialResults().isEmpty()) {
+                        tagID = result.getFiducialResults().get(0).getFiducialId();
+                        if ((tagID == 21 || tagID == 22 || tagID == 23)) {
+                            spinner.setMotif(tagID);
+                            spinner.enableSorting(true);
+                            telemetry.addLine("Tag " + tagID + " detected");
+                        }
+                    } else {
+                        telemetry.addLine("No fiducial detected or Limelight not connected");
+                    }
+                    if(tagID != 0) {
+                        pathStarted = false;
+                        stage = 1;
+                    }
                 }
                 break;
 
             case 1:
                 aimingEnabled = true;
                 if (!pathStarted) {
-                    follower.followPath(paths.Path9, 1.0, true);
+                    follower.followPath(paths.Path2, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
@@ -238,6 +259,8 @@ public class AutoDC extends OpMode {
 
             // ================== SHOOT FIRST 3 ==================
             case 2:
+                targetX = 0;
+                targetY = 144;
                 spinner.updateInventory();
                 aimingEnabled = true;
                 spinner.requestOuttake();
@@ -254,7 +277,7 @@ public class AutoDC extends OpMode {
                 intake.setPower(1);
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path1, 1.0, true);
+                    follower.followPath(paths.Path3, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
@@ -271,7 +294,7 @@ public class AutoDC extends OpMode {
                 intake.setPower(1);
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path2, INTAKE_SWEEP_SPEED, true);
+                    follower.followPath(paths.Path4, INTAKE_SWEEP_SPEED, true);
                     pathStarted = true;
                 }
 
@@ -290,7 +313,7 @@ public class AutoDC extends OpMode {
 
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path4, 1.0, true);
+                    follower.followPath(paths.Path5, 1.0, true);
                     pathStarted = true;
                     intake.setPower(-0.567);
                 }
@@ -317,7 +340,7 @@ public class AutoDC extends OpMode {
                 intake.setPower(1);
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path5, 1.0, true);
+                    follower.followPath(paths.Path6, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
@@ -335,7 +358,7 @@ public class AutoDC extends OpMode {
                 intake.setPower(1);
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path6, INTAKE_PASS2_SPEED, true);
+                    follower.followPath(paths.Path7, INTAKE_PASS2_SPEED, true);
                     pathStarted = true;
                 }
 
@@ -353,7 +376,7 @@ public class AutoDC extends OpMode {
                 spinIntake = true;
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path7, 1.0, true);
+                    follower.followPath(paths.Path8, 1.0, true);
                     pathStarted = true;
                     intake.setPower(-0.567);
                 }
@@ -371,22 +394,84 @@ public class AutoDC extends OpMode {
                 spinner.updateInventory();
                 stage = 11;
                 break;
-
-            // ================== PARK ==================
+            // ================== SECOND STACK PASS ==================
             case 11:
                 if (spinner.requestingOuttake) break;
-                spinner.cancelOuttake();
                 aimingEnabled = false;
+                spinner.cancelOuttake();
+                spinIntake = true;
+                intake.setPower(1);
+
                 if (!pathStarted) {
-                    follower.followPath(paths.Path8, 1.0, true);
+                    follower.followPath(paths.Path9, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
+                    pathStarted = false;
                     stage = 12;
                 }
                 break;
 
             case 12:
+                aimingEnabled = false;
+                if (spinner.requestingOuttake) break;
+
+                spinner.cancelOuttake();
+                spinIntake = true;
+                intake.setPower(1);
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path10, INTAKE_PASS2_SPEED, true);
+                    pathStarted = true;
+                }
+
+                if ( !follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 9;
+                }
+                break;
+
+            // ================== RETURN AGAIN ==================
+            case 13:
+                if (spinner.requestingOuttake) break;
+                aimingEnabled = true;
+                spinner.cancelOuttake();
+                spinIntake = true;
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path11, 1.0, true);
+                    pathStarted = true;
+                    intake.setPower(-0.567);
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    waiting = false;
+                    stage = 14;
+                }
+                break;
+
+            // ================== FINAL SHOOT ==================
+            case 14:
+                aimingEnabled = true;
+                spinner.requestOuttake();
+                spinner.updateInventory();
+                stage = 15;
+                break;
+            // ================== PARK ==================
+            case 15:
+                if (spinner.requestingOuttake) break;
+                spinner.cancelOuttake();
+                aimingEnabled = false;
+                if (!pathStarted) {
+                    follower.followPath(paths.Path12, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    stage = 16;
+                }
+                break;
+
+            case 16:
                 requestOpModeStop();
                 break;
         }
@@ -417,7 +502,7 @@ public class AutoDC extends OpMode {
         // In-band (±100rpm): PID velocity hold
         // Below band: full power 1.0
         // Above band: power 0.0
-        if (Math.abs(rpm - target) <= RPM_TOL) {
+        if (Math.abs(rpm - target) <= 4*RPM_TOL) {
             // PID HOLD
             if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
                 flywheel.setPower(0); // clear any open-loop command
@@ -444,86 +529,142 @@ public class AutoDC extends OpMode {
     }
     // When full -> park at launch position and STAY until outtake finishes
     /* ===================== PATHS ===================== */
-    public static class Paths {
-        public PathChain Path0;
 
-        public PathChain Path9;
-        public PathChain Path3;
+
+
+    public static class Paths {
         public PathChain Path1;
         public PathChain Path2;
+        public PathChain Path3;
         public PathChain Path4;
         public PathChain Path5;
         public PathChain Path6;
         public PathChain Path7;
         public PathChain Path8;
+        public PathChain Path9;
+        public PathChain Path10;
+        public PathChain Path11;
+        public PathChain Path12;
 
         public Paths(Follower follower) {
-            Path0 = follower.pathBuilder()
-                    .addPath(new BezierLine(new Pose(56, 8), new Pose(61.836, 26.8194)))
-                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(293))
+            Path1 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(22.000, 125.000),
+
+                                    new Pose(72.897, 103.178)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(325), Math.toRadians(270))
+
                     .build();
 
-            Path9 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(61.836, 26.8194),
-                            new Pose(57.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(293), Math.toRadians(293))
+            Path2 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(72.897, 103.178),
+
+                                    new Pose(58.093, 85.234)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(270), Math.toRadians(310))
+
                     .build();
 
-            Path3 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(57.000, 12.000),
-                            new Pose(57.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(90), Math.toRadians(299))
+            Path3 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(58.093, 85.234),
+
+                                    new Pose(48.423, 84.905)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(310), Math.toRadians(180))
+
                     .build();
 
-            Path1 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(57.000, 21.000),
-                            new Pose(47.000, 33.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(180))
+            Path4 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(48.423, 84.905),
+
+                                    new Pose(12.785, 83.888)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
+
                     .build();
 
-            Path2 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(42.000, 33.000),
-                            new Pose(9.000, 33.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
+            Path5 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(12.785, 83.888),
+
+                                    new Pose(57.869, 85.234)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(310))
+
                     .build();
 
-            Path4 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(9.000, 33.000),
-                            new Pose(57.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(299))
+            Path6 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(57.869, 85.234),
+
+                                    new Pose(48.011, 61.264)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(310), Math.toRadians(180))
+
                     .build();
 
-            Path5 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(57.000, 21.000),
-                            new Pose(12.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(200))
+            Path7 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(48.011, 61.264),
+
+                                    new Pose(5.316, 57.906)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
+
                     .build();
 
-            Path6 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(12.000, 21.000),
-                            new Pose(12.000, 12.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(200), Math.toRadians(200))
+            Path8 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(5.316, 57.906),
+
+                                    new Pose(57.869, 85.009)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(310))
+
                     .build();
 
-            Path7 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(12.000, 12.000),
-                            new Pose(57.000, 21.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(200), Math.toRadians(299))
+            Path9 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(57.869, 85.009),
+
+                                    new Pose(18.168, 62.131)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(310), Math.toRadians(150))
+
                     .build();
 
-            Path8 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(57.000, 21.000),
-                            new Pose(39.000, 12.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(299), Math.toRadians(180))
+            Path10 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(18.168, 62.131),
+
+                                    new Pose(11.215, 65.047)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(150), Math.toRadians(150))
+
+                    .build();
+
+            Path11 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(11.215, 65.047),
+
+                                    new Pose(58.093, 84.561)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(150), Math.toRadians(310))
+
+                    .build();
+
+            Path12 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(58.093, 84.561),
+
+                                    new Pose(41.000, 64.000)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(310), Math.toRadians(0))
+
                     .build();
         }
     }

@@ -88,9 +88,9 @@ public class TeleOpCip extends OpMode {
     private long rpmInRangeSinceMs = 0;
     boolean turretOnTarget = false;
     boolean blue = true;
-    public static double kP_v = 30.0;     // try 20–35
-    public static double kI_v = 0.0;      // keep 0 for fastest transient
-    public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
+    public static double kP_v = 40.0;     // try 20–35
+    public static double kI_v = 0.5;      // keep 0 for fastest transient
+    public static double kD_v = 0.4;      // add small later only if it overshoots/oscillates
     // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
     public static double kF_v = 14.0;
     enum IntakeState{
