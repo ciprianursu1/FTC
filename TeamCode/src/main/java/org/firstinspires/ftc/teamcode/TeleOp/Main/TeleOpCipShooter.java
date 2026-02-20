@@ -38,7 +38,7 @@ public class TeleOpCipShooter extends OpMode {
     double targetX = 0;
     double targetY = 144;
     private static final double LL_OFFSET_X = -65.5/1000;
-    private static final double LL_OFFSET_Y = 181/1000.0;
+    private static final double LL_OFFSET_Y = -115/1000.0;
     boolean blue = true;
     public static double kP_v = 30.0;
     public static double kI_v = 0.0;

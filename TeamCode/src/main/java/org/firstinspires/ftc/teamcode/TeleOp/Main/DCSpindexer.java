@@ -23,7 +23,7 @@ public class DCSpindexer {
     final double TICKS_PER_120 = TICKS_PER_REV/3.0;
     final double SPINDEXER_SPEED = 0.8;
     final double TRANSFER_UP = 0.02;
-    final double TRANSFER_DOWN = 0.26;
+    final double TRANSFER_DOWN = 0.28;
     final double GREEN_MIN = 140;
     final double GREEN_MAX = 175;
     final double PURPLE_MIN = 190;
@@ -53,10 +53,11 @@ public class DCSpindexer {
     int targetSlot = 0;
     int motifIndex = 0;
     int lastError = 0;
-    final double kP = 0.01;
-    final double kD = 0.0002;
+     double kP = 0.02;
+     double kD = 0.007;
     public boolean requestingOuttake = false;
     boolean lastDelayActive = false;
+    boolean outtakeFinished = false;
     Telemetry telemetry;
     DcMotorEx spindexer;
     Servo transfer;
@@ -91,6 +92,7 @@ public class DCSpindexer {
         Arrays.fill(purpleConfidence,0);
         Arrays.fill(greenConfidence,0);
         Arrays.fill(emptyConfidence,0);
+        updateInventory();
     }
     public void setMotif (int tagID){
         switch (tagID){
@@ -234,7 +236,10 @@ public class DCSpindexer {
     public void update() {
         currentPosition = spindexer.getCurrentPosition();
         boolean delayNow = delayActive();
-
+        if(!outtakeFinished){
+            kP = 0.02;
+            kD = 0.007;
+        }
         if (lastDelayActive && !delayNow) {
             rotating = false; // allow new movement after delay
         }
@@ -266,6 +271,10 @@ public class DCSpindexer {
                     }
 
                     if (spindexerAtTarget()) {
+                        if(outtakeFinished){
+                            updateInventory();
+                            outtakeFinished = false;
+                        }
                         if(slotColors[1] == ArtifactColor.EMPTY || slotColors[2] == ArtifactColor.EMPTY) {
                             int delta = (targetSlot + 3) % 3;
 
@@ -384,6 +393,7 @@ public class DCSpindexer {
                     transfer.setPosition(TRANSFER_DOWN);
                     startDelay(300);
                     transferUp = false;
+                    outtakeFinished = true;
                     break;
                 }
                 if(transferUp && readyToShoot) {
@@ -402,6 +412,9 @@ public class DCSpindexer {
                         } else {
                             requestingOuttake = false;
                             targetPosition = 0;
+                            outtakeFinished = true;
+                            kP = 0.01;
+                            kD = 0;
                             state = SpindexerState.ROTATING_TO_EMPTY;
                         }
                     }

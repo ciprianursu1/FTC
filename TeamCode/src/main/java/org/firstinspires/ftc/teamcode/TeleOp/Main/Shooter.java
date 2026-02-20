@@ -22,14 +22,14 @@ public class Shooter {
     static final double FLYWHEEL_TICKS_PER_REV = 28*1.4;
     double targetX = 0;
     double targetY = 144;
-    static final double minFlywheelRPM = 1000/1.4;
-    static final double maxFlywheelRPM = 6000/1.4;
+    double minFlywheelRPM = 1000/1.4;
+    double maxFlywheelRPM = 6000/1.4;
     final double trajectoryAngleModifierGearRatio = 127/15.0;
     final double trajectoryAnglerMaxTravel = 300.0;
     final double trajectoryAnglePosPerDegree = trajectoryAngleModifierGearRatio/trajectoryAnglerMaxTravel;
     static final double g = 9.81;
     static final double flywheelRadius = 0.048;
-    static final double launcherEfficiency = 0.43;
+    static final double launcherEfficiency = 0.425;
     public static final double turretOffsetX = 0.0;
     public static final double turretOffsetY = 52/1000.0;
     final double[][] launchZoneBig = {{-18,144},{162,144},{72,55}};
@@ -37,11 +37,12 @@ public class Shooter {
     private boolean aimingEnabled = false;
     private boolean launcherEnabled = false;
     final double absoluteTurretHeight = 0.25; //meters
-    final double absoluteTargetHeight = 0.9; //meters
+    final double absoluteTargetHeight = 1.05; //meters
     final double relativeHeight = absoluteTargetHeight - absoluteTurretHeight;
     final double preferredMaxHeightThrow = relativeHeight + 0.3; //meters (relative to turret height)
     final double kP = 0.015;
     final double kD = 0.002;
+    int zone = 0;
     final double MAX_POWER_TURRET = 0.4;
     final double startTurretAngle = -180.0;
     final double LEFT_LIMIT = -110;
@@ -60,10 +61,11 @@ public class Shooter {
     boolean foundSolution = false;
     boolean rpmTooLow = false;
     double currentTurretDeg = 0;
+    double currentOffset = 0;
     double rpm = 0.0;
     double v0 = 0;
     double trajectoryAngle = 70;
-    private static final double RPM_TOL = 150;
+    private static final double RPM_TOL = 50;
     private static final long RPM_STABLE_MS = 80;
     private static final double TURRET_TOL = 2.0;
     private long rpmInRangeSinceMs = 0;
@@ -82,6 +84,8 @@ public class Shooter {
         turret.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         turret.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         turret.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        trajectoryAngleModifier.setDirection(Servo.Direction.REVERSE);
+        trajectoryAngleModifier.setPosition(0);
         this.telemetry = telemetry;
     }
     public void update(Pose pose,Pose velocity, double targetX, double targetY){
@@ -108,7 +112,7 @@ public class Shooter {
         trajectoryAngleModifier.setPosition(position);
     }
     public boolean isRPMInRange(){
-        return rpmInRangeStable();
+        return Math.abs(flywheelTargetRPM - rpm) < RPM_TOL;
     }
     public boolean isTurretOnTarget(){
         return turretOnTarget;
@@ -142,7 +146,13 @@ public class Shooter {
         has_pos = d1 > 0 || d2 > 0 || d3 > 0;
         if (has_neg && has_pos){
             disableAiming();
+            zone = 0;
         } else {
+            if (robotY > 48) {
+                zone = 1;
+            } else {
+                zone = 2;
+            }
             if(!aimingEnabled) enableAiming();
         }
     }
@@ -199,8 +209,16 @@ public class Shooter {
 
 
     private void computeParameters() {
+        if(zone == 2){
+            flywheelTargetRPM = 3050;
+            trajectoryAngle = maxTrajectoryAngle;
+            foundSolution = Math.abs(rpm - flywheelTargetRPM) < RPM_TOL;
+            rpmTooLow = rpm < flywheelTargetRPM - RPM_TOL;
+            return;
+        }
         foundSolution = false;
         rpmTooLow = false;
+        if(rpm > maxFlywheelRPM) return;
         double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
 
         if (d <= 0) {
@@ -209,8 +227,6 @@ public class Shooter {
             return;
         }
         v0 = (rpm / 60.0) * 2 * Math.PI * flywheelRadius * launcherEfficiency;
-        double[] compensation = computeVelocityCompensation();
-        v0 = compensation[1];
         if (v0 > 1.0) {
             double a = g * d * d / (2 * v0 * v0);
             double b = -d;
@@ -233,11 +249,17 @@ public class Shooter {
                     }
                 } else {
                     foundSolution = false;
-                    rpmTooLow = angle1 >= minTrajectoryAngle;
+                    rpmTooLow = angle1 < minTrajectoryAngle && angle2 < minTrajectoryAngle;
                 }
+            } else {
+                foundSolution = false;
+                rpmTooLow = true;
             }
-            flywheelTargetRPM = Range.clip(flywheelTargetRPM,minFlywheelRPM,maxFlywheelRPM);
+        } else {
+            foundSolution = false;
+            rpmTooLow = true;
         }
+            flywheelTargetRPM = Range.clip(flywheelTargetRPM,minFlywheelRPM,maxFlywheelRPM);
     }
 //    private void updateTurretAim() {
 //        disableIfNotInLaunchZone();
@@ -277,35 +299,77 @@ public class Shooter {
 //        turret.setPower(power);
 //    }
 double targetTurretDeg = 0;
-    private void updateTurretAim() {
-        disableIfNotInLaunchZone();
-        if(aimingEnabled) {
-            double robotX = pose.getX();
-            double robotY = pose.getY();
-            double robotHeading = pose.getHeading();
-            double robotHeadingDeg = Math.toDegrees(robotHeading);
-            turretX = robotX + turretOffsetX * Math.cos(robotHeading) - turretOffsetY * Math.sin(robotHeading);
-            turretY = robotY + turretOffsetX * Math.sin(robotHeading) + turretOffsetY * Math.cos(robotHeading);
-            double dx = targetX - turretX;
-            double dy = targetY - turretY;
-
-            double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
-            targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
-        } else {
-            targetTurretDeg = startTurretAngle;
-        }
-        if(targetTurretDeg < -30 && targetTurretDeg > -50) {
-            targetTurretDeg = -30;
-        } else if(targetTurretDeg > -70 && targetTurretDeg < -50){
-            targetTurretDeg = -70;
-        }
-        double error = computeSafeTurretError(currentTurretDeg, targetTurretDeg)/TURRET_DEG_PER_TICK;
-
-        double power = error * kP;
-        turretOnTarget = Math.abs(error) <= TURRET_TOL;
-        power = Range.clip(power, -MAX_POWER_TURRET, MAX_POWER_TURRET);
-        turret.setPower(power);
+//    private void updateTurretAim() {
+//        disableIfNotInLaunchZone();
+//        if(aimingEnabled) {
+//            double robotX = pose.getX();
+//            double robotY = pose.getY();
+//            double robotHeading = pose.getHeading();
+//            double robotHeadingDeg = Math.toDegrees(robotHeading);
+//            turretX = robotX + turretOffsetX * Math.cos(robotHeading) - turretOffsetY * Math.sin(robotHeading);
+//            turretY = robotY + turretOffsetX * Math.sin(robotHeading) + turretOffsetY * Math.cos(robotHeading);
+//            double dx = targetX - turretX;
+//            double dy = targetY - turretY;
+//
+//            double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
+//            targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
+//        } else {
+//            targetTurretDeg = startTurretAngle;
+//        }
+//        if(targetTurretDeg < -30 && targetTurretDeg > -50) {
+//            targetTurretDeg = -30;
+//        } else if(targetTurretDeg > -70 && targetTurretDeg < -50){
+//            targetTurretDeg = -70;
+//        }
+//        double error = computeSafeTurretError(currentTurretDeg, targetTurretDeg)/TURRET_DEG_PER_TICK;
+//
+//        double power = error * kP;
+//        turretOnTarget = Math.abs(error) <= TURRET_TOL;
+//        power = Range.clip(power, -MAX_POWER_TURRET, MAX_POWER_TURRET);
+//        turret.setPower(power);
+//    }
+private void updateTurretAim() {
+    disableIfNotInLaunchZone();
+    if(zone == 1){
+        maxFlywheelRPM = 2500;
+    } else if(zone == 2){
+        maxFlywheelRPM = 3100;
+    } else {
+        maxFlywheelRPM = minFlywheelRPM;
     }
+    double targetTurretDeg;
+    double currentTurretDeg;
+    if(aimingEnabled) {
+        double robotX = pose.getX();
+        double robotY = pose.getY();
+        double robotHeading = pose.getHeading();
+        double robotHeadingDeg = Math.toDegrees(robotHeading);
+        turretX = robotX + turretOffsetX * Math.cos(robotHeading) - turretOffsetY * Math.sin(robotHeading);
+        turretY = robotY + turretOffsetX * Math.sin(robotHeading) + turretOffsetY * Math.cos(robotHeading);
+        double dx = targetX - turretX;
+        double dy = targetY - turretY;
+
+        double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
+        currentTurretDeg = turret.getCurrentPosition() * TURRET_DEG_PER_TICK + startTurretAngle;
+        targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
+    } else {
+        currentTurretDeg = turret.getCurrentPosition() * TURRET_DEG_PER_TICK + startTurretAngle;
+        targetTurretDeg = startTurretAngle;
+    }
+    currentTurretDeg=normalizeAngle(currentTurretDeg);
+    if(targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT){
+        targetTurretDeg = LEFT_LIMIT;
+    } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
+        targetTurretDeg = RIGHT_LIMIT;
+    }
+
+    double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
+
+    double power = error * kP;
+    turretOnTarget = Math.abs(error) <= TURRET_TOL;
+    power = Range.clip(power, -MAX_POWER_TURRET, MAX_POWER_TURRET);
+    turret.setPower(power);
+}
     private double computeSafeTurretError(double from, double to) {
         double error = normalizeAngle(to - from);
 
@@ -359,7 +423,7 @@ double targetTurretDeg = 0;
     public static double kI_v = 0.0;      // keep 0 for fastest transient
     public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
     // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
-    public static final double kF_v = 32767 / maxFlywheelRPM;
+    public final double kF_v = 32767 / maxFlywheelRPM;
     private void updateFlywheel() {
         // Measure RPM
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
@@ -374,27 +438,16 @@ double targetTurretDeg = 0;
         // Below band: full power 1.0
         // Above band: power 0.0
         if (foundSolution) {
-            if (rpm > target - RPM_TOL && rpm <= target) {
-                // PID HOLD
                 if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
                     flywheel.setPower(0); // clear any open-loop command
                     flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
                 }
                 flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_v);
                 flywheel.setVelocity(targetTPS);
-            } else if (rpm < target) {
-                if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
-                    flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-                }
-                flywheel.setPower(1.0);
-            } else {
-                // TOO FAST -> CUT POWER
-                if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
-                    flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-                }
-                flywheel.setPower(0.0);
-            }
         } else {
+            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
+                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            }
             flywheel.setPower(rpmTooLow ? 1 : 0);
         }
 

@@ -154,6 +154,7 @@ public class TeleOpCip extends OpMode {
                 RevHubOrientationOnRobot.UsbFacingDirection.UP
         );
         imu.initialize(new IMU.Parameters(orientation));
+        imu.resetYaw();
         limelight.pipelineSwitch(4);
         limelight.start();
     }
@@ -175,6 +176,8 @@ public class TeleOpCip extends OpMode {
     }
     public void loop(){
         pinpoint.update();
+        YawPitchRollAngles ypr = imu.getRobotYawPitchRollAngles();
+        pinpoint.setHeading(ypr.getYaw(AngleUnit.RADIANS) + startPose.getHeading());
         pose = pinpoint.getPose();
         velocity = pinpoint.getVelocity();
         if(limelightCorrectionMode) {
@@ -186,7 +189,7 @@ public class TeleOpCip extends OpMode {
                 pinpoint.setPose(pedroPose);
             }
             YawPitchRollAngles orientation = imu.getRobotYawPitchRollAngles();
-            limelight.updateRobotOrientation(normalizeAngle(orientation.getYaw() - Math.toDegrees(startPose.getHeading())));
+            limelight.updateRobotOrientation(normalizeAngle(orientation.getYaw() + Math.toDegrees(startPose.getHeading())));
             pinpoint.setHeading(normalizeAngle(orientation.getYaw(AngleUnit.RADIANS) - startPose.getHeading())); // magnetometru rev
         }
         Drive();

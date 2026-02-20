@@ -8,13 +8,16 @@ import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.IMU;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
+import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 
 @TeleOp(name = "Limelight MT2 Accuracy Test", group = "TEST")
 public class LimelightPosTest extends LinearOpMode {
@@ -26,6 +29,7 @@ public class LimelightPosTest extends LinearOpMode {
     // ---------------- POSES ----------------
     private Pose visionPose;
     private Pose pinpointPose;
+    IMU imu;
 
     // ---------------- CONSTANTS ----------------
     private static final double INCH_PER_METER = 39.3701;
@@ -43,7 +47,9 @@ public class LimelightPosTest extends LinearOpMode {
 
         limelight.pipelineSwitch(5); // Blue AprilTags
         limelight.start();
-
+        imu = hardwareMap.get(IMU.class, "imu");
+        imu.initialize(new IMU.Parameters(new RevHubOrientationOnRobot(RevHubOrientationOnRobot.LogoFacingDirection.LEFT, RevHubOrientationOnRobot.UsbFacingDirection.UP)));
+        imu.resetYaw();
         telemetry.addLine("Limelight MT2 Test Ready");
         telemetry.update();
 
@@ -55,10 +61,10 @@ public class LimelightPosTest extends LinearOpMode {
             // Update odometry (for comparison only)
             pinpoint.update();
             pinpointPose = pinpoint.getPose();
-
+            YawPitchRollAngles ypr = imu.getRobotYawPitchRollAngles();
             // Read Limelight
             LLResult result = limelight.getLatestResult();
-            limelight.updateRobotOrientation(pinpointPose.getHeading() + Math.PI/2);
+            limelight.updateRobotOrientation(Math.toDegrees(pinpointPose.getHeading() + Math.PI/2));
 
             if (result != null && result.isValid() && !result.getFiducialResults().isEmpty()) {
                 Pose3D llPose3D = result.getBotpose_MT2();
@@ -88,7 +94,7 @@ public class LimelightPosTest extends LinearOpMode {
             telemetry.addData("Pinpoint Y (in)", pinpointPose.getY());
             telemetry.addData("Pinpoint Heading (deg)",
                     Math.toDegrees(pinpointPose.getHeading()));
-
+            telemetry.addData("IMU Heading", Math.toDegrees(ypr.getYaw(AngleUnit.RADIANS) + Math.PI/2.0));
             telemetry.update();
 
             sleep(50);
