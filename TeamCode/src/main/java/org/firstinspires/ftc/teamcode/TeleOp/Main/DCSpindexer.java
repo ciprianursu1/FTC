@@ -23,7 +23,7 @@ public class DCSpindexer {
     final double TICKS_PER_120 = TICKS_PER_REV/3.0;
     final double SPINDEXER_SPEED = 0.8;
     final double TRANSFER_UP = 0.02;
-    final double TRANSFER_DOWN = 0.26;
+    final double TRANSFER_DOWN = 0.28;
     final double GREEN_MIN = 140;
     final double GREEN_MAX = 175;
     final double PURPLE_MIN = 190;

@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.pedroPathing.Auto;
 
+import com.qualcomm.hardware.limelightvision.LLResult;
+import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.hardware.*;
@@ -13,8 +15,8 @@ import com.pedropathing.paths.PathChain;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.util.Range;
 
-@Autonomous(name = "auto9BlueFarDC", group = "Test")
-public class AutoDC extends OpMode {
+@Autonomous(name = "Auto9BlueFar", group = "Test")
+public class Auto9BlueFar extends OpMode {
 
 
     /* ===================== PEDRO ===================== */
@@ -36,13 +38,14 @@ public class AutoDC extends OpMode {
     Servo trajectoryAngleModifier;
     VoltageSensor batteryVoltage;
     DCSpindexer spinner;
+    Limelight3A limelight;
 
 
     /* ===================== FLYWHEEL (PIDF VELOCITY) ===================== */
-    static final double FLYWHEEL_TICKS_PER_REV = 28.0;
+    static final double FLYWHEEL_TICKS_PER_REV = 28.0*1.4;
 
     // imported from TeleOp shooter
-    public static double TARGET_RPM = 2940 ;
+    public static double TARGET_RPM = 3050 ;
     // Start aggressive; tune after you get fast spin-up
     public static double kP_v = 30.0;     // try 20–35
     public static double kI_v = 0.0;      // keep 0 for fastest transient
@@ -68,18 +71,18 @@ public class AutoDC extends OpMode {
     // Turret soft limits (degrees)
     private static final double LEFT_LIMIT  = -110;
     private static final double RIGHT_LIMIT = 110;
-
+    int tagID = 0;
     // Control
     private static final double kP = 0.015;
     private static final double MAX_POWER_TURETA = 0.4;
-    double targetX = 5;
+    double targetX = 10;
     double targetY = 144;
     double turretX = 0.0;
     double turretY = 0.0;
     private static final double TURRET_TOL_DEG = 2.0;   // allowed error
     private boolean turretOnTarget = false;
-    private static final double RPM_TOL = 50.0;
-    private static final long RPM_STABLE_MS = 150;   // 40–80ms is fine in auto
+    private static final double RPM_TOL = 75.0;
+    private static final long RPM_STABLE_MS = 80;   // 40–80ms is fine in auto
     private long rpmInRangeSinceMs = 0;
     private Pose pose;
     boolean aimingEnabled = true;
@@ -164,13 +167,15 @@ public class AutoDC extends OpMode {
 
         // you had REVERSE in your code
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
-
-
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
+        trajectoryAngleModifier.setDirection(Servo.Direction.REVERSE);
         trajectoryAngleModifier.setPosition(0);
+        limelight = hardwareMap.get(Limelight3A.class, "limelight");
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
         spinner.init();
         autoDelay.reset();
+        limelight.start();
+        limelight.pipelineSwitch(4);
 
         // Start state
         stage = 0;
@@ -214,12 +219,26 @@ public class AutoDC extends OpMode {
             case 0:
                 if (spinner.requestingOuttake) break;
                 if (!pathStarted) {
+                    spinner.updateInventory();
                     follower.followPath(paths.Path0, 1, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
-                    pathStarted = false;
-                    stage = 1;
+                    LLResult result = limelight.getLatestResult();
+                    if (result.isValid() && result.getFiducialResults() != null && !result.getFiducialResults().isEmpty()) {
+                        tagID = result.getFiducialResults().get(0).getFiducialId();
+                        if ((tagID == 21 || tagID == 22 || tagID == 23)) {
+                            spinner.setMotif(tagID);
+                            spinner.enableSorting(true);
+                            telemetry.addLine("Tag " + tagID + " detected");
+                        }
+                    } else {
+                        telemetry.addLine("No fiducial detected or Limelight not connected");
+                    }
+                    if(tagID != 0) {
+                        pathStarted = false;
+                        stage = 1;
+                    }
                 }
                 break;
 
@@ -237,8 +256,10 @@ public class AutoDC extends OpMode {
 
             // ================== SHOOT FIRST 3 ==================
             case 2:
+                spinner.updateInventory();
                 aimingEnabled = true;
                 spinner.requestOuttake();
+                spinner.updateInventory();
                 stage = 3;
                 break;
 
@@ -284,12 +305,12 @@ public class AutoDC extends OpMode {
                 aimingEnabled = true;
                 spinner.cancelOuttake();
                 spinIntake = true;
-                intake.setPower(-0.567);
 
 
                 if (!pathStarted) {
                     follower.followPath(paths.Path4, 1.0, true);
                     pathStarted = true;
+                    intake.setPower(-0.567);
                 }
                 if (!follower.isBusy()) {
                     pathStarted = false;
@@ -301,6 +322,7 @@ public class AutoDC extends OpMode {
             case 6:
                 aimingEnabled = true;
                 spinner.requestOuttake();
+                spinner.updateInventory();
                 stage = 7;
                 break;
 
@@ -347,11 +369,11 @@ public class AutoDC extends OpMode {
                 aimingEnabled = true;
                 spinner.cancelOuttake();
                 spinIntake = true;
-                intake.setPower(-1);
 
                 if (!pathStarted) {
                     follower.followPath(paths.Path7, 1.0, true);
                     pathStarted = true;
+                    intake.setPower(-0.567);
                 }
                 if (!follower.isBusy()) {
                     pathStarted = false;
@@ -364,6 +386,7 @@ public class AutoDC extends OpMode {
             case 10:
                 aimingEnabled = true;
                 spinner.requestOuttake();
+                spinner.updateInventory();
                 stage = 11;
                 break;
 
@@ -460,8 +483,8 @@ public class AutoDC extends OpMode {
 
             Path9 = follower.pathBuilder()
                     .addPath(new BezierLine(
-                            new Pose(57.000, 9.000),
-                            new Pose(57.000, 12.000)))
+                            new Pose(61.836, 26.8194),
+                            new Pose(57.000, 21.000)))
                     .setLinearHeadingInterpolation(Math.toRadians(293), Math.toRadians(293))
                     .build();
 

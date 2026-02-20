@@ -15,8 +15,8 @@ import com.pedropathing.paths.PathChain;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.util.Range;
 
-@Autonomous(name = "Auto6RedFar", group = "Test")
-public class Auto6RedFar extends OpMode {
+@Autonomous(name = "Auto9RedFar", group = "Test")
+public class Auto9RedFar extends OpMode {
 
 
     /* ===================== PEDRO ===================== */
@@ -70,13 +70,12 @@ public class Auto6RedFar extends OpMode {
 
     // Turret soft limits (degrees)
     private static final double LEFT_LIMIT  = -110;
-    int tagID = 0;
     private static final double RIGHT_LIMIT = 110;
 
     // Control
     private static final double kP = 0.015;
     private static final double MAX_POWER_TURETA = 0.4;
-    double targetX = 10;
+    double targetX = 134;
     double targetY = 144;
     double turretX = 0.0;
     double turretY = 0.0;
@@ -85,6 +84,7 @@ public class Auto6RedFar extends OpMode {
     private static final double RPM_TOL = 75.0;
     private static final long RPM_STABLE_MS = 80;   // 40–80ms is fine in auto
     private long rpmInRangeSinceMs = 0;
+    int tagID = 0;
     private Pose pose;
     boolean aimingEnabled = true;
     private double normalizeAngle(double angle) {
@@ -165,7 +165,7 @@ public class Auto6RedFar extends OpMode {
         tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         batteryVoltage = hardwareMap.voltageSensor.iterator().next();
-        limelight = hardwareMap.get(Limelight3A.class, "limelight");
+
         // you had REVERSE in your code
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
@@ -220,10 +220,10 @@ public class Auto6RedFar extends OpMode {
             case 0:
                 if (spinner.requestingOuttake) break;
                 if (!pathStarted) {
-                    targetX=60;
                     spinner.updateInventory();
                     follower.followPath(paths.Path0, 1, true);
                     pathStarted = true;
+                    targetX=60;
                 }
                 if (!follower.isBusy()) {
                     LLResult result = limelight.getLatestResult();
@@ -238,11 +238,12 @@ public class Auto6RedFar extends OpMode {
                         telemetry.addLine("No fiducial detected or Limelight not connected");
                     }
                     if(tagID != 0) {
-                        targetX=134;
                         pathStarted = false;
+                        targetX=134;
                         stage = 1;
                     }
-                }break;
+                }
+                break;
 
             case 1:
                 aimingEnabled = true;
@@ -328,9 +329,72 @@ public class Auto6RedFar extends OpMode {
                 stage = 7;
                 break;
 
+            // ================== SECOND STACK PASS ==================
+            case 7:
+                if (spinner.requestingOuttake) break;
+                aimingEnabled = false;
+                spinner.cancelOuttake();
+                spinIntake = true;
+                intake.setPower(1);
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path5, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 8;
+                }
+                break;
+
+            case 8:
+                aimingEnabled = false;
+                if (spinner.requestingOuttake) break;
+
+                spinner.cancelOuttake();
+                spinIntake = true;
+                intake.setPower(1);
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path6, INTAKE_PASS2_SPEED, true);
+                    pathStarted = true;
+                }
+
+                if ( !follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 9;
+                }
+                break;
+
+            // ================== RETURN AGAIN ==================
+            case 9:
+                if (spinner.requestingOuttake) break;
+                aimingEnabled = true;
+                spinner.cancelOuttake();
+                spinIntake = true;
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path7, 1.0, true);
+                    pathStarted = true;
+                    intake.setPower(-0.567);
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    waiting = false;
+                    stage = 10;
+                }
+                break;
+
+            // ================== FINAL SHOOT ==================
+            case 10:
+                aimingEnabled = true;
+                spinner.requestOuttake();
+                spinner.updateInventory();
+                stage = 11;
+                break;
 
             // ================== PARK ==================
-            case 7:
+            case 11:
                 if (spinner.requestingOuttake) break;
                 spinner.cancelOuttake();
                 aimingEnabled = false;
@@ -339,11 +403,11 @@ public class Auto6RedFar extends OpMode {
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
-                    stage = 8;
+                    stage = 12;
                 }
                 break;
 
-            case 8:
+            case 12:
                 requestOpModeStop();
                 break;
         }

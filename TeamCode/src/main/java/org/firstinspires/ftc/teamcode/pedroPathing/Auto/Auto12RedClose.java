@@ -15,8 +15,8 @@ import com.pedropathing.paths.PathChain;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.util.Range;
 
-@Autonomous(name = "Auto6RedFar", group = "Test")
-public class Auto6RedFar extends OpMode {
+@Autonomous(name = "Auto12RedClose", group = "Test")
+public class Auto12RedClose extends OpMode {
 
 
     /* ===================== PEDRO ===================== */
@@ -45,11 +45,11 @@ public class Auto6RedFar extends OpMode {
     static final double FLYWHEEL_TICKS_PER_REV = 28.0*1.4;
 
     // imported from TeleOp shooter
-    public static double TARGET_RPM = 3050 ;
+    public static double TARGET_RPM = 2350 ;
     // Start aggressive; tune after you get fast spin-up
-    public static double kP_v = 30.0;     // try 20–35
-    public static double kI_v = 0.0;      // keep 0 for fastest transient
-    public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
+    public static double kP_v = 50;     // try 20–35
+    public static double kI_v = 0;      // keep 0 for fastest transient
+    public static double kD_v = 0.5;      // add small later only if it overshoots/oscillates
 
     // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
     public static double kF_v = 14.0;     // try 12.0–14.0
@@ -70,7 +70,6 @@ public class Auto6RedFar extends OpMode {
 
     // Turret soft limits (degrees)
     private static final double LEFT_LIMIT  = -110;
-    int tagID = 0;
     private static final double RIGHT_LIMIT = 110;
 
     // Control
@@ -80,10 +79,11 @@ public class Auto6RedFar extends OpMode {
     double targetY = 144;
     double turretX = 0.0;
     double turretY = 0.0;
+    int tagID = 0;
     private static final double TURRET_TOL_DEG = 2.0;   // allowed error
     private boolean turretOnTarget = false;
-    private static final double RPM_TOL = 75.0;
-    private static final long RPM_STABLE_MS = 80;   // 40–80ms is fine in auto
+    private static final double RPM_TOL = 70;
+    private static final long RPM_STABLE_MS = 0;   // 40–80ms is fine in auto
     private long rpmInRangeSinceMs = 0;
     private Pose pose;
     boolean aimingEnabled = true;
@@ -155,7 +155,7 @@ public class Auto6RedFar extends OpMode {
     public void init() {
 
         follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(88, 8, Math.toRadians(90)));
+        follower.setStartingPose(new Pose(22, 125, Math.toRadians(325)));
         paths = new Paths(follower);
         intake = hardwareMap.get(DcMotor.class, "intake");
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
@@ -171,19 +171,17 @@ public class Auto6RedFar extends OpMode {
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
         trajectoryAngleModifier.setDirection(Servo.Direction.REVERSE);
         trajectoryAngleModifier.setPosition(0);
-        limelight = hardwareMap.get(Limelight3A.class, "limelight");
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
         spinner.init();
         autoDelay.reset();
-        limelight.start();
-        limelight.pipelineSwitch(4);
 
         // Start state
         stage = 0;
         pathStarted = false;
         spinIntake = true;
         rpmInRangeSinceMs = 0;
-
+        limelight.start();
+        limelight.pipelineSwitch(4);
         waiting = false;
 
     }
@@ -207,22 +205,24 @@ public class Auto6RedFar extends OpMode {
 
 
         double remain = AUTO_TOTAL_S - autoDelay.seconds();
-        if (remain <= PARK_IF_REMAIN_S && stage < 11) {
+        if (remain <= PARK_IF_REMAIN_S && stage < 15) {
             // force park ASAP
             abortOuttakeNow();
-            stage = 11;
+            stage = 15;
             pathStarted = false;     // so case 11 will start the park path immediately
         }
-
+        telemetry.addData("RPM",rpm);
+        telemetry.update();
         switch (stage) {
 
             // ================== INITIAL POSITION ==================
             case 0:
+                targetX = 72;
+                targetY = 144;
                 if (spinner.requestingOuttake) break;
                 if (!pathStarted) {
-                    targetX=60;
                     spinner.updateInventory();
-                    follower.followPath(paths.Path0, 1, true);
+                    follower.followPath(paths.Path1, 1, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
@@ -238,16 +238,16 @@ public class Auto6RedFar extends OpMode {
                         telemetry.addLine("No fiducial detected or Limelight not connected");
                     }
                     if(tagID != 0) {
-                        targetX=134;
                         pathStarted = false;
                         stage = 1;
                     }
-                }break;
+                }
+                break;
 
             case 1:
                 aimingEnabled = true;
                 if (!pathStarted) {
-                    follower.followPath(paths.Path9, 1.0, true);
+                    follower.followPath(paths.Path2, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
@@ -258,6 +258,8 @@ public class Auto6RedFar extends OpMode {
 
             // ================== SHOOT FIRST 3 ==================
             case 2:
+                targetX = 0;
+                targetY = 144;
                 spinner.updateInventory();
                 aimingEnabled = true;
                 spinner.requestOuttake();
@@ -274,7 +276,7 @@ public class Auto6RedFar extends OpMode {
                 intake.setPower(1);
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path1, 1.0, true);
+                    follower.followPath(paths.Path3, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
@@ -291,7 +293,7 @@ public class Auto6RedFar extends OpMode {
                 intake.setPower(1);
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path2, INTAKE_SWEEP_SPEED, true);
+                    follower.followPath(paths.Path4, INTAKE_SWEEP_SPEED, true);
                     pathStarted = true;
                 }
 
@@ -310,7 +312,7 @@ public class Auto6RedFar extends OpMode {
 
 
                 if (!pathStarted) {
-                    follower.followPath(paths.Path4, 1.0, true);
+                    follower.followPath(paths.Path5, 1.0, true);
                     pathStarted = true;
                     intake.setPower(-0.567);
                 }
@@ -328,22 +330,147 @@ public class Auto6RedFar extends OpMode {
                 stage = 7;
                 break;
 
-
-            // ================== PARK ==================
+            // ================== SECOND STACK PASS ==================
             case 7:
                 if (spinner.requestingOuttake) break;
-                spinner.cancelOuttake();
                 aimingEnabled = false;
+                spinner.cancelOuttake();
+                spinIntake = true;
+                intake.setPower(1);
+
                 if (!pathStarted) {
-                    follower.followPath(paths.Path8, 1.0, true);
+                    follower.followPath(paths.Path6, 1.0, true);
                     pathStarted = true;
                 }
                 if (!follower.isBusy()) {
+                    pathStarted = false;
                     stage = 8;
                 }
                 break;
 
             case 8:
+                aimingEnabled = false;
+                if (spinner.requestingOuttake) break;
+
+                spinner.cancelOuttake();
+                spinIntake = true;
+                intake.setPower(1);
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path7, INTAKE_PASS2_SPEED, true);
+                    pathStarted = true;
+                }
+
+                if ( !follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 9;
+                }
+                break;
+
+            // ================== RETURN AGAIN ==================
+            case 9:
+                if (spinner.requestingOuttake) break;
+                aimingEnabled = true;
+                spinner.cancelOuttake();
+                spinIntake = true;
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path8, 1.0, true);
+                    pathStarted = true;
+                    intake.setPower(-0.567);
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    waiting = false;
+                    stage = 10;
+                }
+                break;
+
+            // ================== FINAL SHOOT ==================
+            case 10:
+                aimingEnabled = true;
+                spinner.requestOuttake();
+                spinner.updateInventory();
+                stage = 11;
+                break;
+            // ================== SECOND STACK PASS ==================
+            case 11:
+                if (spinner.requestingOuttake) break;
+                aimingEnabled = false;
+                spinner.cancelOuttake();
+                spinIntake = true;
+                intake.setPower(1);
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path9, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 12;
+                }
+                break;
+
+            case 12:
+                aimingEnabled = false;
+                if (spinner.requestingOuttake) break;
+
+                spinner.cancelOuttake();
+                spinIntake = true;
+                intake.setPower(1);
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path10, INTAKE_PASS2_SPEED, true);
+                    pathStarted = true;
+                }
+
+                if ( !follower.isBusy()) {
+                    pathStarted = false;
+                    stage = 9;
+                }
+                break;
+
+            // ================== RETURN AGAIN ==================
+            case 13:
+                if (spinner.requestingOuttake) break;
+                aimingEnabled = true;
+                spinner.cancelOuttake();
+                spinIntake = true;
+
+                if (!pathStarted) {
+                    follower.followPath(paths.Path11, 1.0, true);
+                    pathStarted = true;
+                    intake.setPower(-0.567);
+                }
+                if (!follower.isBusy()) {
+                    pathStarted = false;
+                    waiting = false;
+                    stage = 14;
+                }
+                break;
+
+            // ================== FINAL SHOOT ==================
+            case 14:
+                aimingEnabled = true;
+                spinner.requestOuttake();
+                spinner.updateInventory();
+                stage = 15;
+                break;
+            // ================== PARK ==================
+            case 15:
+                if (spinner.requestingOuttake) break;
+                spinner.cancelOuttake();
+                aimingEnabled = false;
+                if (!pathStarted) {
+                    follower.followPath(paths.Path12, 1.0, true);
+                    pathStarted = true;
+                }
+                if (!follower.isBusy()) {
+                    stage = 16;
+                }
+                break;
+
+            case 16:
                 requestOpModeStop();
                 break;
         }
@@ -374,7 +501,7 @@ public class Auto6RedFar extends OpMode {
         // In-band (±100rpm): PID velocity hold
         // Below band: full power 1.0
         // Above band: power 0.0
-        if (Math.abs(rpm - target) <= RPM_TOL) {
+        if (Math.abs(rpm - target) <= 4*RPM_TOL) {
             // PID HOLD
             if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
                 flywheel.setPower(0); // clear any open-loop command
@@ -401,99 +528,142 @@ public class Auto6RedFar extends OpMode {
     }
     // When full -> park at launch position and STAY until outtake finishes
     /* ===================== PATHS ===================== */
+
+
+
     public static class Paths {
-        public PathChain Path0, Path9, Path3, Path1, Path2, Path4, Path5, Path6, Path7, Path8;
+        public PathChain Path1;
+        public PathChain Path2;
+        public PathChain Path3;
+        public PathChain Path4;
+        public PathChain Path5;
+        public PathChain Path6;
+        public PathChain Path7;
+        public PathChain Path8;
+        public PathChain Path9;
+        public PathChain Path10;
+        public PathChain Path11;
+        public PathChain Path12;
 
         public Paths(Follower follower) {
+            Path1 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(22.000, 125.000),
 
-            Path0 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(88.000, 8.000),
-                            new Pose(87, 9)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(90),
-                            Math.toRadians(-113))
+                                    new Pose(72.897, 103.178)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(325), Math.toRadians(270))
+
                     .build();
 
-            Path9 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(87.000, 9.000),
-                            new Pose(87.000, 12.000)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(-113),
-                            Math.toRadians(-113))
+            Path2 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(72.897, 103.178),
+
+                                    new Pose(58.093, 85.234)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(270), Math.toRadians(310))
+
                     .build();
 
-            Path3 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(87.000, 12.000),
-                            new Pose(87.000, 21.000)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(90),
-                            Math.toRadians(-119))
+            Path3 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(58.093, 85.234),
+
+                                    new Pose(48.423, 84.905)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(310), Math.toRadians(180))
+
                     .build();
 
-            Path1 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(87.000, 21.000),
-                            new Pose(97.000, 33.000)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(-119),
-                            Math.toRadians(0))
+            Path4 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(48.423, 84.905),
+
+                                    new Pose(12.785, 83.888)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
+
                     .build();
 
-            Path2 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(97.000, 33.000),
-                            new Pose(135.000, 33.000)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(0),
-                            Math.toRadians(0))
+            Path5 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(12.785, 83.888),
+
+                                    new Pose(57.869, 85.234)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(310))
+
                     .build();
 
-            Path4 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(135.000, 33.000),
-                            new Pose(87.000, 21.000)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(0),
-                            Math.toRadians(-119))
+            Path6 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(57.869, 85.234),
+
+                                    new Pose(48.011, 61.264)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(310), Math.toRadians(180))
+
                     .build();
 
-            Path5 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(87.000, 21.000),
-                            new Pose(123.000, 21.000)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(-119),
-                            Math.toRadians(-20))
+            Path7 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(48.011, 61.264),
+
+                                    new Pose(5.316, 57.906)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
+
                     .build();
 
-            Path6 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(123.000, 21.000),
-                            new Pose(131.000, 12.000)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(-20),
-                            Math.toRadians(-20))
+            Path8 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(5.316, 57.906),
+
+                                    new Pose(57.869, 85.009)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(310))
+
                     .build();
 
-            Path7 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(131.000, 12.000),
-                            new Pose(87.000, 21.000)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(-20),
-                            Math.toRadians(-119))
+            Path9 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(57.869, 85.009),
+
+                                    new Pose(18.168, 62.131)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(310), Math.toRadians(150))
+
                     .build();
 
-            Path8 = follower.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(87.000, 21.000),
-                            new Pose(98.000, 21.000)))
-                    .setLinearHeadingInterpolation(
-                            Math.toRadians(-119),
-                            Math.toRadians(-119))
+            Path10 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(18.168, 62.131),
+
+                                    new Pose(11.215, 65.047)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(150), Math.toRadians(150))
+
+                    .build();
+
+            Path11 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(11.215, 65.047),
+
+                                    new Pose(58.093, 84.561)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(150), Math.toRadians(310))
+
+                    .build();
+
+            Path12 = follower.pathBuilder().addPath(
+                            new BezierLine(
+                                    new Pose(58.093, 84.561),
+
+                                    new Pose(41.000, 64.000)
+                            )
+                    ).setLinearHeadingInterpolation(Math.toRadians(310), Math.toRadians(0))
+
                     .build();
         }
     }
