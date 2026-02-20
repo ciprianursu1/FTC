@@ -8,6 +8,7 @@ import com.qualcomm.robotcore.hardware.*;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import org.firstinspires.ftc.teamcode.TeleOp.Main.DCSpindexer;
 import org.firstinspires.ftc.teamcode.TeleOp.Main.PoseStorage;
+import org.firstinspires.ftc.teamcode.TeleOp.Main.Shooter;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import com.pedropathing.geometry.BezierLine;
 import com.pedropathing.follower.Follower;
@@ -32,14 +33,11 @@ public class Auto6RedFar extends OpMode {
 
     /* ===================== HARDWARE ===================== */
     DcMotor intake;
-    DcMotorEx tureta;
-
-    DcMotorEx flywheel;
     Servo trajectoryAngleModifier;
     VoltageSensor batteryVoltage;
     DCSpindexer spinner;
     Limelight3A limelight;
-
+    Shooter shooter;
 
     /* ===================== FLYWHEEL (PIDF VELOCITY) ===================== */
     static final double FLYWHEEL_TICKS_PER_REV = 28.0*1.4;
@@ -62,7 +60,7 @@ public class Auto6RedFar extends OpMode {
     private static final double PARK_IF_REMAIN_S = 2.0;
 
     boolean spinIntake = false;
-    final boolean blue = true;
+    final boolean blue = false;
     private static final double MOTOR_TICKS_PER_REV = 384.5;
     private static final double MOTOR_TO_TURRET_RATIO = 75.0 / 26.0;
     private static final double DEG_PER_TICK_TURETA =
@@ -70,13 +68,12 @@ public class Auto6RedFar extends OpMode {
 
     // Turret soft limits (degrees)
     private static final double LEFT_LIMIT  = -110;
-    int tagID = 0;
     private static final double RIGHT_LIMIT = 110;
-
+    int tagID = 0;
     // Control
     private static final double kP = 0.015;
     private static final double MAX_POWER_TURETA = 0.4;
-    double targetX = 10;
+    double targetX = 134;
     double targetY = 144;
     double turretX = 0.0;
     double turretY = 0.0;
@@ -91,41 +88,6 @@ public class Auto6RedFar extends OpMode {
         while (angle > 180) angle -= 360;
         while (angle < -180) angle += 360;
         return angle;
-    }
-    private void updateTurretAim() {
-
-        double robotX = pose.getX();
-        double robotY = pose.getY();
-        double robotHeading = pose.getHeading();
-        double robotHeadingDeg = Math.toDegrees(robotHeading);
-        turretX = robotX;
-        turretY = robotY;
-        double dx = targetX - turretX;
-        double dy = targetY - turretY;
-
-        double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
-
-        double startTurretAngle = -180.0;
-        double currentTurretDeg = tureta.getCurrentPosition() * DEG_PER_TICK_TURETA + startTurretAngle;
-        double targetTurretDeg;
-        if(aimingEnabled) {
-            targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
-        } else {
-            targetTurretDeg = startTurretAngle;
-        }
-        currentTurretDeg=normalizeAngle(currentTurretDeg);
-        if(targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT){
-            targetTurretDeg = LEFT_LIMIT;
-        } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
-            targetTurretDeg = RIGHT_LIMIT;
-        }
-
-        double error = normalizeAngle(targetTurretDeg - currentTurretDeg);
-        turretOnTarget = Math.abs(error) <= TURRET_TOL_DEG;
-
-        double power = error * kP;
-        power = Range.clip(power, -MAX_POWER_TURETA, MAX_POWER_TURETA);
-        tureta.setPower(power);
     }
 
 
@@ -158,22 +120,15 @@ public class Auto6RedFar extends OpMode {
         follower.setStartingPose(new Pose(88, 8, Math.toRadians(90)));
         paths = new Paths(follower);
         intake = hardwareMap.get(DcMotor.class, "intake");
-        flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
-        flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-        flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        tureta = hardwareMap.get(DcMotorEx.class, "tureta");
-        tureta.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        tureta.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         batteryVoltage = hardwareMap.voltageSensor.iterator().next();
-        limelight = hardwareMap.get(Limelight3A.class, "limelight");
         // you had REVERSE in your code
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
-        trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
-        trajectoryAngleModifier.setDirection(Servo.Direction.REVERSE);
-        trajectoryAngleModifier.setPosition(0);
+        shooter = new Shooter(hardwareMap,"flywheel","tureta","unghituretaoy");
+        shooter.init(telemetry);
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
         spinner.init();
+        spinner.setInventory(new DCSpindexer.ArtifactColor[]{DCSpindexer.ArtifactColor.GREEN,DCSpindexer.ArtifactColor.PURPLE,DCSpindexer.ArtifactColor.PURPLE});
         autoDelay.reset();
         limelight.start();
         limelight.pipelineSwitch(4);
@@ -192,17 +147,18 @@ public class Auto6RedFar extends OpMode {
     /* ===================== LOOP ===================== */
     @Override
     public void loop() {
+        shooter.enableLauncher();
         if(resetTimer){
             autoDelay.reset();
             resetTimer = false;
         }
         follower.update();
         pose = follower.getPose();
-        updateFlywheel();
         spinner.update();
-        updateTurretAim();
+        Pose velocity = new Pose(0,0,pose.getHeading());
+        shooter.update(pose,velocity,targetX,targetY);
         if(spinner.requestingOuttake){
-            spinner.setReady(turretOnTarget && rpmInRangeStable());
+            spinner.setReady(shooter.isTurretOnTarget() && shooter.isRPMInRange());
         }
 
 
@@ -220,8 +176,6 @@ public class Auto6RedFar extends OpMode {
             case 0:
                 if (spinner.requestingOuttake) break;
                 if (!pathStarted) {
-                    targetX=60;
-                    spinner.updateInventory();
                     follower.followPath(paths.Path0, 1, true);
                     pathStarted = true;
                 }
@@ -231,18 +185,16 @@ public class Auto6RedFar extends OpMode {
                         tagID = result.getFiducialResults().get(0).getFiducialId();
                         if ((tagID == 21 || tagID == 22 || tagID == 23)) {
                             spinner.setMotif(tagID);
-                            spinner.enableSorting(true);
+                            spinner.enableSorting(false);
                             telemetry.addLine("Tag " + tagID + " detected");
                         }
                     } else {
                         telemetry.addLine("No fiducial detected or Limelight not connected");
                     }
-                    if(tagID != 0) {
-                        targetX=134;
-                        pathStarted = false;
-                        stage = 1;
-                    }
-                }break;
+                    pathStarted = false;
+                    stage = 1;
+                }
+                break;
 
             case 1:
                 aimingEnabled = true;
@@ -258,10 +210,9 @@ public class Auto6RedFar extends OpMode {
 
             // ================== SHOOT FIRST 3 ==================
             case 2:
-                spinner.updateInventory();
                 aimingEnabled = true;
+                spinner.setInventory(new DCSpindexer.ArtifactColor[]{DCSpindexer.ArtifactColor.GREEN,DCSpindexer.ArtifactColor.PURPLE,DCSpindexer.ArtifactColor.PURPLE});
                 spinner.requestOuttake();
-                spinner.updateInventory();
                 stage = 3;
                 break;
 
@@ -303,9 +254,9 @@ public class Auto6RedFar extends OpMode {
 
             // ================== RETURN TO SHOOT ==================
             case 5:
+                spinner.setInventory(new DCSpindexer.ArtifactColor[]{DCSpindexer.ArtifactColor.GREEN,DCSpindexer.ArtifactColor.PURPLE,DCSpindexer.ArtifactColor.PURPLE});
                 if (spinner.requestingOuttake) break;
                 aimingEnabled = true;
-                spinner.cancelOuttake();
                 spinIntake = true;
 
 
@@ -322,18 +273,16 @@ public class Auto6RedFar extends OpMode {
 
             // ================== SHOOT STACK ==================
             case 6:
+                spinner.setInventory(new DCSpindexer.ArtifactColor[]{DCSpindexer.ArtifactColor.GREEN,DCSpindexer.ArtifactColor.PURPLE,DCSpindexer.ArtifactColor.PURPLE});
                 aimingEnabled = true;
                 spinner.requestOuttake();
-                spinner.updateInventory();
                 stage = 7;
                 break;
-
 
             // ================== PARK ==================
             case 7:
                 if (spinner.requestingOuttake) break;
                 spinner.cancelOuttake();
-                aimingEnabled = false;
                 if (!pathStarted) {
                     follower.followPath(paths.Path8, 1.0, true);
                     pathStarted = true;
@@ -354,50 +303,7 @@ public class Auto6RedFar extends OpMode {
         double y = pose.getY();
         double heading = pose.getHeading();
 
-        PoseStorage.savePose(hardwareMap.appContext, x, y, heading, blue,21);
-    }
-    private void updateFlywheel() {
-        // Measure RPM
-        rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
-
-        // Voltage compensation for feedforward
-        double v = batteryVoltage.getVoltage();
-        if (v < 1.0) v = 12.0; // safety
-        double kF_comp = kF_v * (12.0 / v);
-
-        double target = TARGET_RPM;
-
-        // Convert target to ticks/sec for RUN_USING_ENCODER velocity
-        double targetTPS = target * FLYWHEEL_TICKS_PER_REV / 60.0;
-
-        // === Control policy ===
-        // In-band (±100rpm): PID velocity hold
-        // Below band: full power 1.0
-        // Above band: power 0.0
-        if (Math.abs(rpm - target) <= RPM_TOL) {
-            // PID HOLD
-            if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
-                flywheel.setPower(0); // clear any open-loop command
-                flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-            }
-            flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_comp);
-            flywheel.setVelocity(targetTPS);
-        } else if (rpm < (target - RPM_TOL)) {
-            // KICK UP FAST
-            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
-                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-            }
-            flywheel.setPower(1.0);
-        } else {
-            // TOO FAST -> CUT POWER
-            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
-                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-            }
-            flywheel.setPower(0.0);
-        }
-
-        // Refresh rpm after command (optional but nice for telemetry stability)
-        rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
+        PoseStorage.savePose(hardwareMap.appContext, x, y, heading, blue,tagID );
     }
     // When full -> park at launch position and STAY until outtake finishes
     /* ===================== PATHS ===================== */
@@ -409,7 +315,7 @@ public class Auto6RedFar extends OpMode {
             Path0 = follower.pathBuilder()
                     .addPath(new BezierLine(
                             new Pose(88.000, 8.000),
-                            new Pose(87, 9)))
+                            new Pose(82.164, 26.8194)))
                     .setLinearHeadingInterpolation(
                             Math.toRadians(90),
                             Math.toRadians(-113))
@@ -427,7 +333,7 @@ public class Auto6RedFar extends OpMode {
             Path3 = follower.pathBuilder()
                     .addPath(new BezierLine(
                             new Pose(87.000, 12.000),
-                            new Pose(87.000, 21.000)))
+                            new Pose(87.000, 20.000)))
                     .setLinearHeadingInterpolation(
                             Math.toRadians(90),
                             Math.toRadians(-119))
@@ -435,7 +341,7 @@ public class Auto6RedFar extends OpMode {
 
             Path1 = follower.pathBuilder()
                     .addPath(new BezierLine(
-                            new Pose(87.000, 21.000),
+                            new Pose(87.000, 20.000),
                             new Pose(97.000, 33.000)))
                     .setLinearHeadingInterpolation(
                             Math.toRadians(-119),
@@ -454,7 +360,7 @@ public class Auto6RedFar extends OpMode {
             Path4 = follower.pathBuilder()
                     .addPath(new BezierLine(
                             new Pose(135.000, 33.000),
-                            new Pose(87.000, 21.000)))
+                            new Pose(87.000, 20.000)))
                     .setLinearHeadingInterpolation(
                             Math.toRadians(0),
                             Math.toRadians(-119))
@@ -462,7 +368,7 @@ public class Auto6RedFar extends OpMode {
 
             Path5 = follower.pathBuilder()
                     .addPath(new BezierLine(
-                            new Pose(87.000, 21.000),
+                            new Pose(87.000, 20.000),
                             new Pose(123.000, 21.000)))
                     .setLinearHeadingInterpolation(
                             Math.toRadians(-119),
@@ -481,7 +387,7 @@ public class Auto6RedFar extends OpMode {
             Path7 = follower.pathBuilder()
                     .addPath(new BezierLine(
                             new Pose(131.000, 12.000),
-                            new Pose(87.000, 21.000)))
+                            new Pose(87.000, 20.000)))
                     .setLinearHeadingInterpolation(
                             Math.toRadians(-20),
                             Math.toRadians(-119))
@@ -489,7 +395,7 @@ public class Auto6RedFar extends OpMode {
 
             Path8 = follower.pathBuilder()
                     .addPath(new BezierLine(
-                            new Pose(87.000, 21.000),
+                            new Pose(87.000, 20.000),
                             new Pose(98.000, 21.000)))
                     .setLinearHeadingInterpolation(
                             Math.toRadians(-119),

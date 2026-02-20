@@ -53,8 +53,8 @@ public class DCSpindexer {
     int targetSlot = 0;
     int motifIndex = 0;
     int lastError = 0;
-     double kP = 0.01;
-     double kD = 0.005;
+     double kP = 0.022;
+     double kD = 0.009;
     public boolean requestingOuttake = false;
     boolean lastDelayActive = false;
     boolean outtakeFinished = false;

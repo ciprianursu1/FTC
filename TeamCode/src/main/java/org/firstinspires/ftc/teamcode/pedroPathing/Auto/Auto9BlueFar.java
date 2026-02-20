@@ -367,7 +367,7 @@ public class Auto9BlueFar extends OpMode {
         double y = pose.getY();
         double heading = pose.getHeading();
 
-        PoseStorage.savePose(hardwareMap.appContext, x, y, heading, blue,21);
+        PoseStorage.savePose(hardwareMap.appContext, x, y, heading, blue,tagID );
     }
     // When full -> park at launch position and STAY until outtake finishes
     /* ===================== PATHS ===================== */

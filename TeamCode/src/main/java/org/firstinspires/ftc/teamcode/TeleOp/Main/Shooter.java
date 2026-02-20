@@ -212,12 +212,12 @@ public class Shooter {
         if(zone == 1){
             maxFlywheelRPM = 2500;
         } else if(zone == 2){
-            maxFlywheelRPM = 3100;
+            maxFlywheelRPM = 3150;
         } else {
             maxFlywheelRPM = minFlywheelRPM;
         }
         if(zone == 2){
-            flywheelTargetRPM = 3150;
+            flywheelTargetRPM = 3100;
             trajectoryAngle = maxTrajectoryAngle;
             foundSolution = Math.abs(rpm - flywheelTargetRPM) < RPM_TOL;
             rpmTooLow = rpm < flywheelTargetRPM - RPM_TOL;
