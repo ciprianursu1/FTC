@@ -19,11 +19,11 @@ public class Shooter {
     Telemetry telemetry;
     final double maxTrajectoryAngle = 70;
     final double minTrajectoryAngle = 50;
-    static final double FLYWHEEL_TICKS_PER_REV = 28;
+    static final double FLYWHEEL_TICKS_PER_REV = 28*1.4;
     double targetX = 0;
     double targetY = 144;
-    static final double minFlywheelRPM = 1000;
-    static final double maxFlywheelRPM = 6000;
+    static final double minFlywheelRPM = 1000/1.4;
+    static final double maxFlywheelRPM = 6000/1.4;
     final double trajectoryAngleModifierGearRatio = 127/15.0;
     final double trajectoryAnglerMaxTravel = 300.0;
     final double trajectoryAnglePosPerDegree = trajectoryAngleModifierGearRatio/trajectoryAnglerMaxTravel;
@@ -57,6 +57,8 @@ public class Shooter {
     double turretX = 0.0;
     double turretY = 0.0;
     double flywheelTargetRPM = 0;
+    boolean foundSolution = false;
+    boolean rpmTooLow = false;
     double currentTurretDeg = 0;
     double rpm = 0.0;
     double v0 = 0;
@@ -197,6 +199,8 @@ public class Shooter {
 
 
     private void computeParameters() {
+        foundSolution = false;
+        rpmTooLow = false;
         double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
 
         if (d <= 0) {
@@ -207,9 +211,7 @@ public class Shooter {
         v0 = (rpm / 60.0) * 2 * Math.PI * flywheelRadius * launcherEfficiency;
         double[] compensation = computeVelocityCompensation();
         v0 = compensation[1];
-
-        boolean foundSolution = false;
-        if(v0 > 1.0) {
+        if (v0 > 1.0) {
             double a = g * d * d / (2 * v0 * v0);
             double b = -d;
             double c = relativeHeight + a;
@@ -229,58 +231,13 @@ public class Shooter {
                     } else {
                         trajectoryAngle = angle2;
                     }
+                } else {
+                    foundSolution = false;
+                    rpmTooLow = angle1 >= minTrajectoryAngle;
                 }
             }
+            flywheelTargetRPM = Range.clip(flywheelTargetRPM,minFlywheelRPM,maxFlywheelRPM);
         }
-        if (!foundSolution) {
-            double k = (4.0 * preferredMaxHeightThrow / d)
-                    * (1.0 - Math.sqrt(1.0 - relativeHeight / preferredMaxHeightThrow));
-
-            double idealAngle = Math.toDegrees(Math.atan(k));
-            boolean constrained = (idealAngle > maxTrajectoryAngle || idealAngle < minTrajectoryAngle);
-
-            if (constrained) {
-                trajectoryAngle = (idealAngle > maxTrajectoryAngle) ? maxTrajectoryAngle : minTrajectoryAngle;
-
-                double thetaRad = Math.toRadians(trajectoryAngle);
-                double cosTheta = Math.cos(thetaRad);
-                double tanTheta = Math.tan(thetaRad);
-
-                if (Math.abs(cosTheta) < 1e-6) {
-                    return;
-                }
-
-                double denominator = d * tanTheta - relativeHeight;
-
-                if (denominator <= 0) {
-                    flywheelTargetRPM = minFlywheelRPM;
-                    return;
-                }
-
-                double exitVelocity = Math.sqrt((g * d * d) /
-                        (2 * cosTheta * cosTheta * denominator));
-
-                flywheelTargetRPM = (int) (60 * exitVelocity /
-                        (2 * Math.PI * flywheelRadius * launcherEfficiency));
-
-            } else {
-                trajectoryAngle = idealAngle;
-
-                double thetaRad = Math.toRadians(trajectoryAngle);
-                double sinTheta = Math.sin(thetaRad);
-
-                if (Math.abs(sinTheta) < 1e-6) {
-                    return;
-                }
-
-                v0 = Math.sqrt(2 * g * preferredMaxHeightThrow) / sinTheta;
-                compensation = computeVelocityCompensation();
-                v0 = compensation[1];
-                flywheelTargetRPM = (int) (60 * v0 / (2 * Math.PI * flywheelRadius * launcherEfficiency));
-            }
-        }
-
-        flywheelTargetRPM = Math.max(minFlywheelRPM, Math.min(flywheelTargetRPM, maxFlywheelRPM));
     }
 //    private void updateTurretAim() {
 //        disableIfNotInLaunchZone();
@@ -322,8 +279,6 @@ public class Shooter {
 double targetTurretDeg = 0;
     private void updateTurretAim() {
         disableIfNotInLaunchZone();
-        double targetTurretDeg;
-        double currentTurretDeg;
         if(aimingEnabled) {
             double robotX = pose.getX();
             double robotY = pose.getY();
@@ -335,20 +290,16 @@ double targetTurretDeg = 0;
             double dy = targetY - turretY;
 
             double fieldAngle = Math.toDegrees(Math.atan2(dy, dx));
-            currentTurretDeg = turret.getCurrentPosition() * TURRET_DEG_PER_TICK + startTurretAngle;
             targetTurretDeg = normalizeAngle(fieldAngle - robotHeadingDeg);
         } else {
-            currentTurretDeg = turret.getCurrentPosition() * TURRET_DEG_PER_TICK + startTurretAngle;
             targetTurretDeg = startTurretAngle;
         }
-        currentTurretDeg=normalizeAngle(currentTurretDeg);
-        if(targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT){
-            targetTurretDeg = LEFT_LIMIT;
-        } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {
-            targetTurretDeg = RIGHT_LIMIT;
+        if(targetTurretDeg < -30 && targetTurretDeg > -50) {
+            targetTurretDeg = -30;
+        } else if(targetTurretDeg > -70 && targetTurretDeg < -50){
+            targetTurretDeg = -70;
         }
-
-        double error = normalizeAngle(targetTurretDeg - currentTurretDeg)/TURRET_DEG_PER_TICK;
+        double error = computeSafeTurretError(currentTurretDeg, targetTurretDeg)/TURRET_DEG_PER_TICK;
 
         double power = error * kP;
         turretOnTarget = Math.abs(error) <= TURRET_TOL;
@@ -397,20 +348,18 @@ double targetTurretDeg = 0;
         if(forceEnableLauncher) return;
         forceEnableLauncher = true;
         launcherEnabled = true;
-        updateLauncher();
     }
 
     public void disableLauncher(){
         if(!forceEnableLauncher) return;
         forceEnableLauncher = false;
         launcherEnabled = false;
-        updateLauncher();
     }
     public static double kP_v = 30.0;     // try 20–35
     public static double kI_v = 0.0;      // keep 0 for fastest transient
     public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
     // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
-    public static double kF_v = 14.0;
+    public static final double kF_v = 32767 / maxFlywheelRPM;
     private void updateFlywheel() {
         // Measure RPM
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
@@ -424,38 +373,33 @@ double targetTurretDeg = 0;
         // In-band (±100rpm): PID velocity hold
         // Below band: full power 1.0
         // Above band: power 0.0
-        if (Math.abs(rpm - target) <= RPM_TOL) {
-            // PID HOLD
-            if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
-                flywheel.setPower(0); // clear any open-loop command
-                flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        if (foundSolution) {
+            if (rpm > target - RPM_TOL && rpm <= target) {
+                // PID HOLD
+                if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
+                    flywheel.setPower(0); // clear any open-loop command
+                    flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                }
+                flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_v);
+                flywheel.setVelocity(targetTPS);
+            } else if (rpm < target) {
+                if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
+                    flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+                }
+                flywheel.setPower(1.0);
+            } else {
+                // TOO FAST -> CUT POWER
+                if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
+                    flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+                }
+                flywheel.setPower(0.0);
             }
-            flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_v);
-            flywheel.setVelocity(targetTPS);
-        } else if (rpm < (target - RPM_TOL)) {
-            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
-                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-            }
-            flywheel.setPower(1.0);
         } else {
-            // TOO FAST -> CUT POWER
-            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
-                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-            }
-            flywheel.setPower(0.0);
+            flywheel.setPower(rpmTooLow ? 1 : 0);
         }
 
+
         // Refresh rpm after command (optional but nice for telemetry stability)
-        rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
-    }
-    private void updateLauncher(){
-        double ticksPerSecond;
-        if(launcherEnabled || forceEnableLauncher){
-            ticksPerSecond = flywheelTargetRPM * FLYWHEEL_TICKS_PER_REV / 60.0;
-        } else {
-            ticksPerSecond = 2000 * FLYWHEEL_TICKS_PER_REV / 60.0;
-        }
-        flywheel.setVelocity(ticksPerSecond);
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
     }
 

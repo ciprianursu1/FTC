@@ -10,105 +10,88 @@ import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.IMU;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
-import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 
-@TeleOp(name="Pedro + Limelight Test", group="TEST")
+@TeleOp(name = "Limelight MT2 Accuracy Test", group = "TEST")
 public class LimelightPosTest extends LinearOpMode {
 
-    Limelight3A limelight;
-    PinpointLocalizer pinpoint;
-    Pose startPose;
-    Pose currentPose;
-    boolean limelightCorrectionMode = true;
+    // ---------------- HARDWARE ----------------
+    private Limelight3A limelight;
+    private PinpointLocalizer pinpoint;
 
-    static final double INCH_PER_METER = 39.3701;
-    static final double LL_OFFSET_X = -65.5/1000.0; // meters
-    static final double LL_OFFSET_Y = 181/1000.0;   // meters
-    static final double turretOffsetX = 0.0;
-    static final double turretOffsetY = 52/1000.0;
+    // ---------------- POSES ----------------
+    private Pose visionPose;
+    private Pose pinpointPose;
+
+    // ---------------- CONSTANTS ----------------
+    private static final double INCH_PER_METER = 39.3701;
+
+    // Limelight position relative to robot center (meters)
+    private static final double LL_OFFSET_X = -65.5 / 1000.0; // forward +
+    private static final double LL_OFFSET_Y = 181.0 / 1000.0; // left +
 
     @Override
     public void runOpMode() throws InterruptedException {
 
-        limelight = hardwareMap.get(Limelight3A.class,"limelight");
-        pinpoint = new PinpointLocalizer(hardwareMap, localizerConstants); // use real constants if available
-        startPose = new Pose(64.3, 15.74/2.0, Math.toRadians(90));
-        pinpoint.setStartPose(startPose);
+        // ---------- INIT ----------
+        limelight = hardwareMap.get(Limelight3A.class, "limelight");
+        pinpoint = new PinpointLocalizer(hardwareMap, localizerConstants);
 
-        limelight.pipelineSwitch(5);
+        limelight.pipelineSwitch(5); // Blue AprilTags
         limelight.start();
+
+        telemetry.addLine("Limelight MT2 Test Ready");
+        telemetry.update();
 
         waitForStart();
 
-        while(opModeIsActive()) {
+        // ---------- LOOP ----------
+        while (opModeIsActive()) {
 
-            // Update Pedro pose
+            // Update odometry (for comparison only)
             pinpoint.update();
-            currentPose = pinpoint.getPose();
-            limelight.updateRobotOrientation(Math.toDegrees(currentPose.getHeading()));
-            // Limelight-based correction
-            if(limelightCorrectionMode) {
-                LLResult result = limelight.getLatestResult();
-                if(result != null && result.getBotpose_MT2() != null) {
-                    Pose3D LLPose = result.getBotpose_MT2();
+            pinpointPose = pinpoint.getPose();
 
-                    Pose pedroPose = PoseConverter.pose2DToPose(
-                            new Pose2D(
-                                    DistanceUnit.INCH,
-                                    LLPose.getPosition().x * INCH_PER_METER,
-                                    LLPose.getPosition().y * INCH_PER_METER,
-                                    AngleUnit.DEGREES,
-                                    LLPose.getOrientation().getYaw()
-                            ),
-                            InvertedFTCCoordinates.INSTANCE
+            // Read Limelight
+            LLResult result = limelight.getLatestResult();
+            limelight.updateRobotOrientation(pinpointPose.getHeading() + Math.PI/2);
+
+            if (result != null && result.isValid() && !result.getFiducialResults().isEmpty()) {
+                Pose3D llPose3D = result.getBotpose_MT2();
+
+                if (llPose3D != null) {
+                    visionPose = new Pose(
+                            llPose3D.getPosition().x*INCH_PER_METER + 72,
+                            llPose3D.getPosition().y*INCH_PER_METER + 72,
+                            llPose3D.getOrientation().getYaw(AngleUnit.RADIANS) - Math.PI/2.0
                     );
-
-                    pedroPose = processPedroPose(pedroPose);
-                    currentPose = pedroPose;
                 }
             }
 
-            // Telemetry
-            telemetry.addLine("=== Pedro Limelight Test ===");
-            if(currentPose != null) {
-                telemetry.addData("Pedro X (in)", currentPose.getX());
-                telemetry.addData("Pedro Y (in)", currentPose.getY());
-                telemetry.addData("Pedro Heading (deg)", Math.toDegrees(currentPose.getHeading()));
+            // ---------- TELEMETRY ----------
+            telemetry.addLine("=== LIMELIGHT MT2 ===");
+            if (visionPose != null) {
+                telemetry.addData("Vision X (in)", visionPose.getX());
+                telemetry.addData("Vision Y (in)", visionPose.getY());
+                telemetry.addData("Vision Heading (deg)",
+                        Math.toDegrees(visionPose.getHeading()));
             } else {
-                telemetry.addLine("Pedro Pose: NULL");
+                telemetry.addLine("Vision Pose: INVALID");
             }
-            telemetry.addData("pinpoint heading",pinpoint.getPose().getHeading());
+
+            telemetry.addLine("=== PINPOINT ===");
+            telemetry.addData("Pinpoint X (in)", pinpointPose.getX());
+            telemetry.addData("Pinpoint Y (in)", pinpointPose.getY());
+            telemetry.addData("Pinpoint Heading (deg)",
+                    Math.toDegrees(pinpointPose.getHeading()));
+
             telemetry.update();
 
             sleep(50);
         }
-    }
-
-    // ---------------- Helpers ----------------
-    private Pose processPedroPose(Pose pedroPose) {
-        double x = pedroPose.getX();
-        double y = pedroPose.getY();
-        double heading = pedroPose.getHeading();
-
-        // Apply Limelight offsets
-        heading = normalizeAngle(heading); // No turret for this test
-        x += (Math.cos(heading) * LL_OFFSET_X - Math.sin(heading) * LL_OFFSET_Y) * INCH_PER_METER;
-        y += (Math.sin(heading) * LL_OFFSET_X + Math.cos(heading) * LL_OFFSET_Y) * INCH_PER_METER;
-        x -= (turretOffsetX * Math.cos(heading) - turretOffsetY * Math.sin(heading))*INCH_PER_METER;
-        y -= (turretOffsetX * Math.sin(heading) + turretOffsetY * Math.cos(heading))*INCH_PER_METER;
-        pedroPose = new Pose(x, y, heading);
-        return pedroPose;
-    }
-
-    private double normalizeAngle(double angle) {
-        while(angle > 180) angle -= 360;
-        while(angle < -180) angle += 360;
-        return angle;
     }
 }

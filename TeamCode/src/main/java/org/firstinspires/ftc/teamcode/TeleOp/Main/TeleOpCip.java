@@ -41,7 +41,7 @@ public class TeleOpCip extends OpMode {
     Pose pose;
     IMU imu;
     static final double INCH_PER_METER = 100/2.54;
-    static final double FLYWHEEL_TICKS_PER_REV = 28;
+    static final double FLYWHEEL_TICKS_PER_REV = 28*1.4;
     double targetX = 0;
     double targetY = 144;
     static final double minFlywheelRPM = 1000;
