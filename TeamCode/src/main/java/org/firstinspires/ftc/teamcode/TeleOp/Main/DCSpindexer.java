@@ -29,7 +29,7 @@ public class DCSpindexer {
     final double PURPLE_MIN = 190;
     final double PURPLE_MAX = 250;
     final int CONFIDENCE_THRESHOLD = 1;
-    private enum ArtifactColor{
+    public enum ArtifactColor{
         PURPLE,GREEN,EMPTY
     }
     private enum SpindexerState{
@@ -53,8 +53,8 @@ public class DCSpindexer {
     int targetSlot = 0;
     int motifIndex = 0;
     int lastError = 0;
-     double kP = 0.02;
-     double kD = 0.007;
+     double kP = 0.01;
+     double kD = 0.005;
     public boolean requestingOuttake = false;
     boolean lastDelayActive = false;
     boolean outtakeFinished = false;
@@ -92,7 +92,9 @@ public class DCSpindexer {
         Arrays.fill(purpleConfidence,0);
         Arrays.fill(greenConfidence,0);
         Arrays.fill(emptyConfidence,0);
-        updateInventory();
+    }
+    public void setInventory(ArtifactColor[] inventory){
+        slotColors = inventory;
     }
     public void setMotif (int tagID){
         switch (tagID){
@@ -236,10 +238,6 @@ public class DCSpindexer {
     public void update() {
         currentPosition = spindexer.getCurrentPosition();
         boolean delayNow = delayActive();
-        if(!outtakeFinished){
-            kP = 0.02;
-            kD = 0.007;
-        }
         if (lastDelayActive && !delayNow) {
             rotating = false; // allow new movement after delay
         }
@@ -413,8 +411,6 @@ public class DCSpindexer {
                             requestingOuttake = false;
                             targetPosition = 0;
                             outtakeFinished = true;
-                            kP = 0.01;
-                            kD = 0;
                             state = SpindexerState.ROTATING_TO_EMPTY;
                         }
                     }

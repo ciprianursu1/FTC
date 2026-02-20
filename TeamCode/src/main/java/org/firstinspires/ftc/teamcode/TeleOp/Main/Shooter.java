@@ -33,7 +33,7 @@ public class Shooter {
     public static final double turretOffsetX = 0.0;
     public static final double turretOffsetY = 52/1000.0;
     final double[][] launchZoneBig = {{-18,144},{162,144},{72,55}};
-    final double[][] launchZoneSmall = {{40,0},{102,0},{72,32}};
+    final double[][] launchZoneSmall = {{40,0},{102,0},{72,40}};
     private boolean aimingEnabled = false;
     private boolean launcherEnabled = false;
     final double absoluteTurretHeight = 0.25; //meters
@@ -65,7 +65,7 @@ public class Shooter {
     double rpm = 0.0;
     double v0 = 0;
     double trajectoryAngle = 70;
-    private static final double RPM_TOL = 50;
+    private static final double RPM_TOL = 25;
     private static final long RPM_STABLE_MS = 80;
     private static final double TURRET_TOL = 2.0;
     private long rpmInRangeSinceMs = 0;
@@ -209,16 +209,32 @@ public class Shooter {
 
 
     private void computeParameters() {
+        if(zone == 1){
+            maxFlywheelRPM = 2500;
+        } else if(zone == 2){
+            maxFlywheelRPM = 3100;
+        } else {
+            maxFlywheelRPM = minFlywheelRPM;
+        }
         if(zone == 2){
-            flywheelTargetRPM = 3050;
+            flywheelTargetRPM = 3150;
             trajectoryAngle = maxTrajectoryAngle;
             foundSolution = Math.abs(rpm - flywheelTargetRPM) < RPM_TOL;
             rpmTooLow = rpm < flywheelTargetRPM - RPM_TOL;
             return;
         }
+        if(zone==0){
+            flywheelTargetRPM = 1000;
+            foundSolution=false;
+            rpmTooLow = false;
+            return;
+
+        }
         foundSolution = false;
         rpmTooLow = false;
-        if(rpm > maxFlywheelRPM) return;
+        if(rpm > maxFlywheelRPM) {
+            return;
+        }
         double d = Math.hypot(targetX - turretX, targetY - turretY) * 0.0254;
 
         if (d <= 0) {
@@ -330,13 +346,6 @@ double targetTurretDeg = 0;
 //    }
 private void updateTurretAim() {
     disableIfNotInLaunchZone();
-    if(zone == 1){
-        maxFlywheelRPM = 2500;
-    } else if(zone == 2){
-        maxFlywheelRPM = 3100;
-    } else {
-        maxFlywheelRPM = minFlywheelRPM;
-    }
     double targetTurretDeg;
     double currentTurretDeg;
     if(aimingEnabled) {
@@ -423,37 +432,53 @@ private void updateTurretAim() {
     public static double kI_v = 0.0;      // keep 0 for fastest transient
     public static double kD_v = 0.0;      // add small later only if it overshoots/oscillates
     // Correct ballpark for 6000rpm Yellow Jacket (28tpr): ~11.7 at 12V no-load
-    public final double kF_v = 32767 / maxFlywheelRPM;
+    public final double kF_v = 14;
+//    private void updateFlywheel() {
+//        // Measure RPM
+//        rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
+//
+//        double target = flywheelTargetRPM;
+//
+//        // Convert target to ticks/sec for RUN_USING_ENCODER velocity
+//        double targetTPS = target * FLYWHEEL_TICKS_PER_REV / 60.0;
+//
+//        // === Control policy ===
+//        // In-band (±100rpm): PID velocity hold
+//        // Below band: full power 1.0
+//        // Above band: power 0.0
+//        if (foundSolution) {
+//                if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
+//                    flywheel.setPower(0); // clear any open-loop command
+//                    flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+//                }
+//                flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_v);
+//                flywheel.setVelocity(targetTPS);
+//        } else {
+//            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
+//                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+//            }
+//            flywheel.setPower(rpmTooLow ? 1 : 0);
+//        }
+//
+//
+//        // Refresh rpm after command (optional but nice for telemetry stability)
+//        rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
+//    }
     private void updateFlywheel() {
-        // Measure RPM
+
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
+        if(!foundSolution) {
+            flywheel.setVelocity(rpmTooLow ? maxFlywheelRPM* FLYWHEEL_TICKS_PER_REV / 60.0 : minFlywheelRPM* FLYWHEEL_TICKS_PER_REV / 60.0);
+            return;
+        }
+        double targetTPS = flywheelTargetRPM * FLYWHEEL_TICKS_PER_REV / 60.0;
 
-        double target = flywheelTargetRPM;
-
-        // Convert target to ticks/sec for RUN_USING_ENCODER velocity
-        double targetTPS = target * FLYWHEEL_TICKS_PER_REV / 60.0;
-
-        // === Control policy ===
-        // In-band (±100rpm): PID velocity hold
-        // Below band: full power 1.0
-        // Above band: power 0.0
-        if (foundSolution) {
-                if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
-                    flywheel.setPower(0); // clear any open-loop command
-                    flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-                }
-                flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_v);
-                flywheel.setVelocity(targetTPS);
-        } else {
-            if (flywheel.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
-                flywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-            }
-            flywheel.setPower(rpmTooLow ? 1 : 0);
+        if (flywheel.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
+            flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         }
 
-
-        // Refresh rpm after command (optional but nice for telemetry stability)
-        rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
+        flywheel.setVelocityPIDFCoefficients(kP_v, kI_v, kD_v, kF_v);
+        flywheel.setVelocity(targetTPS);
     }
 
     public void enableAiming(){

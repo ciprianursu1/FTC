@@ -60,6 +60,9 @@ public class Auto6BlueFar extends OpMode {
     private static final double INTAKE_PASS2_SPEED = 0.35;   // case 8 (was 1.0)
     private static final double AUTO_TOTAL_S = 30.0;
     private static final double PARK_IF_REMAIN_S = 2.0;
+    final double trajectoryAngleModifierGearRatio = 127/15.0;
+    final double trajectoryAnglerMaxTravel = 300.0;
+    final double trajectoryAnglePosPerDegree = trajectoryAngleModifierGearRatio/trajectoryAnglerMaxTravel;
     int tagID = 0;
 
     boolean spinIntake = false;
@@ -149,6 +152,12 @@ public class Auto6BlueFar extends OpMode {
         return (now - rpmInRangeSinceMs) >= RPM_STABLE_MS;
     }
     private boolean resetTimer = true;
+    private void setTrajectoryAngle(double angle){
+        angle = Range.clip(angle,50,70);
+        double position = (angle - 50)*trajectoryAnglePosPerDegree;
+        position = Range.clip(position,0,1);
+        trajectoryAngleModifier.setPosition(position);
+    }
 
     /* ===================== INIT ===================== */
     @Override
@@ -168,9 +177,9 @@ public class Auto6BlueFar extends OpMode {
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
         // you had REVERSE in your code
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
-        trajectoryAngleModifier = hardwareMap.gwet(Servo.class, "unghituretaoy");
+        trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
         trajectoryAngleModifier.setDirection(Servo.Direction.REVERSE);
-        trajectoryAngleModifier.setPosition(0);
+        setTrajectoryAngle(70);
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
         spinner.init();
