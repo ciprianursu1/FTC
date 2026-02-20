@@ -352,6 +352,7 @@ private void updateTurretAim() {
         double robotX = pose.getX();
         double robotY = pose.getY();
         double robotHeading = pose.getHeading();
+
         double robotHeadingDeg = Math.toDegrees(robotHeading);
         turretX = robotX + turretOffsetX * Math.cos(robotHeading) - turretOffsetY * Math.sin(robotHeading);
         turretY = robotY + turretOffsetX * Math.sin(robotHeading) + turretOffsetY * Math.cos(robotHeading);
