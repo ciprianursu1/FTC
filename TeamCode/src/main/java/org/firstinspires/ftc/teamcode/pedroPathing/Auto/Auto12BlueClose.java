@@ -2,10 +2,14 @@ package org.firstinspires.ftc.teamcode.pedroPathing.Auto;
 
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.hardware.*;
 import com.qualcomm.robotcore.util.ElapsedTime;
+
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 import org.firstinspires.ftc.teamcode.TeleOp.Main.DCSpindexer;
 import org.firstinspires.ftc.teamcode.TeleOp.Main.PoseStorage;
 import org.firstinspires.ftc.teamcode.TeleOp.Main.Shooter;
@@ -38,6 +42,7 @@ public class Auto12BlueClose extends OpMode {
     DCSpindexer spinner;
     Limelight3A limelight;
     Shooter shooter;
+    IMU imu;
 
     /* ===================== FLYWHEEL (PIDF VELOCITY) ===================== */
     static final double FLYWHEEL_TICKS_PER_REV = 28.0 * 1.4;
@@ -99,6 +104,13 @@ public class Auto12BlueClose extends OpMode {
 
         spinner = new DCSpindexer(hardwareMap, "Color1", "Color2", "Color3", "spinner", "ejector", telemetry);
         spinner.init(true);
+        imu = hardwareMap.get(IMU.class, "imu");
+        RevHubOrientationOnRobot orientation = new RevHubOrientationOnRobot(
+                RevHubOrientationOnRobot.LogoFacingDirection.LEFT,
+                RevHubOrientationOnRobot.UsbFacingDirection.UP
+        );
+        imu.initialize(new IMU.Parameters(orientation));
+        imu.resetYaw();
 
         // Start state
         stage = 0;
@@ -120,6 +132,8 @@ public class Auto12BlueClose extends OpMode {
         }
         shooter.update(pose,velocity,targetX, targetY,spinner.isReady() && spinner.requestingOuttake);
         follower.update();
+        YawPitchRollAngles ypr = imu.getRobotYawPitchRollAngles();
+        follower.setHeading(ypr.getYaw(AngleUnit.RADIANS) + Math.toRadians(325));
         pose = follower.getPose();
         spinner.update();
 
