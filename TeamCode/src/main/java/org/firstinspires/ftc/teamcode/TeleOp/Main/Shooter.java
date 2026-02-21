@@ -475,7 +475,7 @@ private void updateTurretAim() {
     private void updateFlywheel() {
 
         rpm = flywheel.getVelocity() / FLYWHEEL_TICKS_PER_REV * 60.0;
-        if(rpm > maxFlywheelRPM) {
+        if(rpm > flywheelTargetRPM) {
             flywheel.setPower(0);
         } else if (Math.abs(rpm - flywheelTargetRPM) < RPM_TOL) {
             double target = flywheelTargetRPM;
