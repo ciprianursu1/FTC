@@ -54,8 +54,8 @@ public class DCSpindexer {
     int motifIndex = 0;
     int lastError = 0;
     int tickOffset = 0;
-     double kP = 0.018;
-     double kD = 0.0011;
+     double kP = 0.01;
+     double kD = 0.0002;
     public boolean requestingOuttake = false;
     boolean lastDelayActive = false;
     boolean outtakeFinished = false;

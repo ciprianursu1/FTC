@@ -180,7 +180,9 @@ public class TeleOpCipShooter extends OpMode {
             }
         }
         if(gamepad2.optionsWasPressed() && gamepad2.shareWasPressed()){
+            startPose = blue ? new Pose(27,132.5,324) : new Pose(117,132.5,216);
             pinpoint.setPose(startPose);
+            imu.resetYaw();
             gamepad2.rumble(100);
         }
         if(gamepad2.touchpadWasPressed()){
