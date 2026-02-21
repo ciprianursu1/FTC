@@ -77,16 +77,23 @@ public class Shooter {
     private static final int RPM_DECAY_LOOPS  = 3;   // cycles of feasibility before decay
 
     private int rpmFeasibleCounter = 0;
+    double angleOffset = 0;
     public Shooter(HardwareMap hwMap, String flywheelName, String turretName, String servoName){
         flywheel = hwMap.get(DcMotorEx.class,flywheelName);
         turret = hwMap.get(DcMotorEx.class,turretName);
         trajectoryAngleModifier = hwMap.get(Servo.class,servoName);
     }
-    public void init(Telemetry telemetry) {
-        flywheel.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
+    public void setTurretAngleOffset(double offset){
+        angleOffset = offset;
+    }
+    public void init(Telemetry telemetry,boolean isAuto) {
+        if(isAuto){
+            flywheel.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
+            turret.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
+        }
+
         flywheel.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
         flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, new PIDFCoefficients(30, 2.3, 4, 14.0));
-        turret.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         turret.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         turret.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         trajectoryAngleModifier.setDirection(Servo.Direction.REVERSE);
@@ -373,7 +380,7 @@ private void updateTurretAim() {
         currentTurretDeg = turret.getCurrentPosition() * TURRET_DEG_PER_TICK + startTurretAngle;
         targetTurretDeg = startTurretAngle;
     }
-    currentTurretDeg=normalizeAngle(currentTurretDeg);
+    currentTurretDeg=normalizeAngle(currentTurretDeg + angleOffset);
     if(targetTurretDeg < 0 && targetTurretDeg > LEFT_LIMIT){
         targetTurretDeg = LEFT_LIMIT;
     } else if (targetTurretDeg >= 0 && targetTurretDeg < RIGHT_LIMIT) {

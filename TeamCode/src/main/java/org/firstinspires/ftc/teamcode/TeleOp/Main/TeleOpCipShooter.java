@@ -44,6 +44,8 @@ public class TeleOpCipShooter extends OpMode {
     public static double kI_v = 0.0;
     public static double kD_v = 0.0;
     public static double kF_v = 14.0;
+    double turretOffset = 0;
+    double spinnerOffset = 0;
     enum IntakeState{
         ON,OFF,REVERSE
     }
@@ -56,9 +58,9 @@ public class TeleOpCipShooter extends OpMode {
 
     public void init() {
         shooter = new Shooter(hardwareMap,"flywheel","tureta","unghituretaoy");
-        shooter.init(telemetry);
+        shooter.init(telemetry,false);
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
-        spinner.init();
+        spinner.init(false);
         intake = hardwareMap.get(DcMotorSimple.class, "intake");
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
         front_left = hardwareMap.dcMotor.get("lf");
@@ -67,7 +69,7 @@ public class TeleOpCipShooter extends OpMode {
         back_right = hardwareMap.dcMotor.get("rr");
         pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
         startPose = new Pose(64.3, 15.74/2.0, Math.toRadians(90));
-        pinpoint.setPose(startPose);
+        pinpoint.setStartPose(startPose);
         double[] pose = PoseStorage.loadPose(hardwareMap.appContext);
 
         double x = pose[0];
@@ -76,11 +78,12 @@ public class TeleOpCipShooter extends OpMode {
         blue = pose[3] == 1;
         if(blue){
             targetX = 0;
-            targetY = 144;
         } else {
             targetX = 144;
-            targetY = 144;
         }
+        int motif = (int) pose[4];
+        spinner.setMotif(motif);
+        targetY = 144;
         pinpoint.setPose(new Pose(x,y,heading));
 
         front_right.setDirection(DcMotorSimple.Direction.FORWARD);
@@ -118,18 +121,18 @@ public class TeleOpCipShooter extends OpMode {
         pinpoint.update();
         pose = pinpoint.getPose();
         velocity = pinpoint.getVelocity();
-        if(limelightCorrectionMode) {
-            LLResult result = limelight.getLatestResult();
-            if (result != null && result.getBotpose_MT2() != null) {
-                Pose3D LLPose = result.getBotpose_MT2();
-                Pose pedroPose = PoseConverter.pose2DToPose(new Pose2D(DistanceUnit.INCH, LLPose.getPosition().x * INCH_PER_METER, LLPose.getPosition().y * INCH_PER_METER, AngleUnit.DEGREES, LLPose.getOrientation().getYaw()), InvertedFTCCoordinates.INSTANCE);
-                pedroPose = processPedroPose(pedroPose);
-                pinpoint.setPose(pedroPose);
-            }
-            YawPitchRollAngles orientation = imu.getRobotYawPitchRollAngles();
-            limelight.updateRobotOrientation(normalizeAngle(orientation.getYaw() - Math.toDegrees(startPose.getHeading())));
-            pinpoint.setHeading(normalizeAngle(orientation.getYaw(AngleUnit.RADIANS) - startPose.getHeading())); // magnetometru rev
-        }
+//        if(limelightCorrectionMode) {
+//            LLResult result = limelight.getLatestResult();
+//            if (result != null && result.getBotpose_MT2() != null) {
+//                Pose3D LLPose = result.getBotpose_MT2();
+//                Pose pedroPose = PoseConverter.pose2DToPose(new Pose2D(DistanceUnit.INCH, LLPose.getPosition().x * INCH_PER_METER, LLPose.getPosition().y * INCH_PER_METER, AngleUnit.DEGREES, LLPose.getOrientation().getYaw()), InvertedFTCCoordinates.INSTANCE);
+//                pedroPose = processPedroPose(pedroPose);
+//                pinpoint.setPose(pedroPose);
+//            }
+//            YawPitchRollAngles orientation = imu.getRobotYawPitchRollAngles();
+//            limelight.updateRobotOrientation(normalizeAngle(orientation.getYaw() - Math.toDegrees(startPose.getHeading())));
+//            pinpoint.setHeading(normalizeAngle(orientation.getYaw(AngleUnit.RADIANS) - startPose.getHeading())); // magnetometru rev
+//        }
         Drive();
         if(spinner.spindexerFull()){
             shooter.enableLauncher();
@@ -149,7 +152,6 @@ public class TeleOpCipShooter extends OpMode {
                 break;
         }
         if(spinner.requestingOuttake){
-//            spinner.setReady(rpmInRangeStable() && turretOnTarget);
             spinner.setReady(shooter.isRPMInRange() && shooter.isTurretOnTarget());
         }
         spinner.update();
@@ -185,7 +187,18 @@ public class TeleOpCipShooter extends OpMode {
             spinner.enabledSorting = !spinner.enabledSorting;
             gamepad2.rumbleBlips(spinner.enabledSorting ? 2 : 1);
         }
-        limelightCorrectionMode = gamepad2.left_trigger > 0.5;
+        if(gamepad1.dpad_up){
+            turretOffset += 0.1;
+        } else if (gamepad1.dpad_down){
+            turretOffset -= 0.1;
+        } else if (gamepad1.dpad_left) {
+            spinnerOffset += 0.1;
+        } else if (gamepad1.dpad_right) {
+            spinnerOffset -= 0.1;
+        }
+        shooter.setTurretAngleOffset(turretOffset);
+        spinner.setOffset((int)spinnerOffset);
+//        limelightCorrectionMode = gamepad2.left_trigger > 0.5;
     }
 
     private Pose processPedroPose(Pose pedroPose){
@@ -207,9 +220,9 @@ public class TeleOpCipShooter extends OpMode {
         return angle;
     }
     private void Drive() {
-        double left_x = gamepad2.left_stick_x;
-        double left_y = -gamepad2.left_stick_y;
-        double right_x = gamepad2.right_stick_x;
+        double left_x = gamepad1.left_stick_x;
+        double left_y = -gamepad1.left_stick_y;
+        double right_x = gamepad1.right_stick_x;
 
         double front_left_pw  = left_y + left_x + right_x;
         double back_left_pw   = left_y - left_x + right_x;

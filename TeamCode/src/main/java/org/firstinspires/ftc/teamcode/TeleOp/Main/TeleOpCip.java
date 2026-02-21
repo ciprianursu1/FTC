@@ -106,18 +106,16 @@ public class TeleOpCip extends OpMode {
 
         turret = hardwareMap.get(DcMotorEx.class, "tureta");
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
-        flywheel.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         flywheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         PIDFCoefficients pidfCoefficients = new PIDFCoefficients(14, 2.3, 4, 14.45);
         flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER,pidfCoefficients);
-        turret.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         turret.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         turret.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
 
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         trajectoryAngleModifier = hardwareMap.get(Servo.class, "unghituretaoy");
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
-        spinner.init();
+        spinner.init(false);
         intake = hardwareMap.get(DcMotorSimple.class, "intake");
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
         front_left = hardwareMap.dcMotor.get("lf");
@@ -134,18 +132,19 @@ public class TeleOpCip extends OpMode {
         blue = pose[3] == 1;
         if(blue){
             targetX = 0;
-            targetY = 144;
         } else {
             targetX = 144;
-            targetY = 144;
         }
+        int motif = (int)pose[4];
+        spinner.setMotif(motif);
+        targetY = 144;
+        pinpoint.setStartPose(new Pose(x,y,heading));
         pinpoint.setPose(new Pose(x,y,heading));
 
         front_right.setDirection(DcMotorSimple.Direction.FORWARD);
         back_right.setDirection(DcMotorSimple.Direction.FORWARD);
         front_left.setDirection(DcMotorSimple.Direction.REVERSE);
         back_left.setDirection(DcMotorSimple.Direction.REVERSE);
-        spinner.setMotif(21);
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
         imu = hardwareMap.get(IMU.class, "imu");
         RevHubOrientationOnRobot orientation = new RevHubOrientationOnRobot(

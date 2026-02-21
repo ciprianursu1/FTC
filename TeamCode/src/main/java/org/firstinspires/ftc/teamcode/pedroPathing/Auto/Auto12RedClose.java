@@ -94,10 +94,10 @@ public class Auto12RedClose extends OpMode {
         limelight.pipelineSwitch(4);
 
         shooter = new Shooter(hardwareMap, "flywheel", "tureta", "unghituretaoy");
-        shooter.init(telemetry);
+        shooter.init(telemetry,true);
 
         spinner = new DCSpindexer(hardwareMap, "Color1", "Color2", "Color3", "spinner", "ejector", telemetry);
-        spinner.init();
+        spinner.init(true);
 
         // Start state
         stage = 0;

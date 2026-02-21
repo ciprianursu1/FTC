@@ -124,10 +124,10 @@ public class Auto9RedFar extends OpMode {
         // you had REVERSE in your code
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
         shooter = new Shooter(hardwareMap,"flywheel","tureta","unghituretaoy");
-        shooter.init(telemetry);
+        shooter.init(telemetry,true);
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
-        spinner.init();
+        spinner.init(true);
         spinner.setInventory(new DCSpindexer.ArtifactColor[]{DCSpindexer.ArtifactColor.GREEN,DCSpindexer.ArtifactColor.PURPLE,DCSpindexer.ArtifactColor.PURPLE});
         autoDelay.reset();
         limelight.start();

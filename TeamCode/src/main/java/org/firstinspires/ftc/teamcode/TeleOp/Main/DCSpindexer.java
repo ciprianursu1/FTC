@@ -53,6 +53,7 @@ public class DCSpindexer {
     int targetSlot = 0;
     int motifIndex = 0;
     int lastError = 0;
+    int tickOffset = 0;
      double kP = 0.018;
      double kD = 0.0011;
     public boolean requestingOuttake = false;
@@ -77,17 +78,17 @@ public class DCSpindexer {
         colorSensors[2] = hwMap.get(RevColorSensorV3.class,sensor3Name);
         this.telemetry = telemetry;
     }
-    public void init(){
+    public void init(boolean isAuto){
         for(int i = 0; i < 3; i++) {
             colorSensors[i].setGain(5);
         }
-        spindexer.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        spindexer.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        if(isAuto) {
+            spindexer.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        }
         spindexer.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         spindexer.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         transfer.setDirection(Servo.Direction.REVERSE);
         transfer.setPosition(TRANSFER_DOWN);
-        spindexer.setTargetPositionTolerance(1);
         Arrays.fill(slotColors,ArtifactColor.EMPTY);
         Arrays.fill(purpleConfidence,0);
         Arrays.fill(greenConfidence,0);
@@ -95,6 +96,9 @@ public class DCSpindexer {
     }
     public void setInventory(ArtifactColor[] inventory){
         slotColors = inventory;
+    }
+    public void setOffset(int offset){
+        tickOffset = offset;
     }
     public void setMotif (int tagID){
         switch (tagID){
@@ -202,8 +206,7 @@ public class DCSpindexer {
         rotating = true;
     }
     private void updateSpindexerPID(int targetPosition) {
-        currentPosition = spindexer.getCurrentPosition();
-
+        currentPosition = spindexer.getCurrentPosition() + tickOffset;
         int error = targetPosition - currentPosition;
 
         int derivative = error - lastError;
