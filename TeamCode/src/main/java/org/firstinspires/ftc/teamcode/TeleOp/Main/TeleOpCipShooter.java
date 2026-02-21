@@ -136,7 +136,7 @@ public class TeleOpCipShooter extends OpMode {
         } else {
             shooter.disableLauncher();
         }
-        shooter.update(pose,velocity,limelightCorrectionMode ? 72 : targetX, targetY,spinner.isReady() && spinner.requestingOuttake);
+        shooter.update(pose,velocity,targetX, targetY,spinner.isReady() && spinner.requestingOuttake);
         switch (intakeState){
             case ON:
                 intake.setPower(1);

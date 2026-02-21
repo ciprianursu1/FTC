@@ -127,20 +127,19 @@ public class TeleOpCip extends OpMode {
         pinpoint = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
         startPose = new Pose(64.3, 15.74/2.0, Math.toRadians(90));
         pinpoint.setPose(startPose);
-//        double[] pose = PoseStorage.loadPose(hardwareMap.appContext);
-//
-//        double x = pose[0];
-//        double y = pose[1];
-//        double heading = pose[2];
-//        blue = pose[3] == 1;
-//        if(blue){
-//            targetX = 0;
-//            targetY = 144;
-//        } else {
-//            targetX = 144;
-//            targetY = 144;
-//        }
-//        pinpoint.setPose(new Pose(x,y,heading));
+        double[] pose = PoseStorage.loadPose(hardwareMap.appContext);
+        double x = pose[0];
+        double y = pose[1];
+        double heading = pose[2];
+        blue = pose[3] == 1;
+        if(blue){
+            targetX = 0;
+            targetY = 144;
+        } else {
+            targetX = 144;
+            targetY = 144;
+        }
+        pinpoint.setPose(new Pose(x,y,heading));
 
         front_right.setDirection(DcMotorSimple.Direction.FORWARD);
         back_right.setDirection(DcMotorSimple.Direction.FORWARD);

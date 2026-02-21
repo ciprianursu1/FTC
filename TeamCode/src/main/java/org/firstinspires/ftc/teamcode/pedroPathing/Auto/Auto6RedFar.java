@@ -156,7 +156,7 @@ public class Auto6RedFar extends OpMode {
         pose = follower.getPose();
         spinner.update();
         Pose velocity = new Pose(0,0,pose.getHeading());
-        shooter.update(pose,velocity,targetX,targetY);
+        shooter.update(pose,velocity,targetX, targetY,spinner.isReady() && spinner.requestingOuttake);
         if(spinner.requestingOuttake){
             spinner.setReady(shooter.isTurretOnTarget() && shooter.isRPMInRange());
         }

@@ -15,6 +15,7 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.paths.PathChain;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.util.Range;
+import org.firstinspires.ftc.teamcode.TeleOp.Main.Shooter;
 
 @Autonomous(name = "Auto12BlueClose", group = "Test")
 public class Auto12BlueClose extends OpMode {
@@ -47,6 +48,9 @@ public class Auto12BlueClose extends OpMode {
     public static double kI_v = 0.0;
     public static double kD_v = 0.5;
     public static double kF_v = 14.0;
+    public int targetX = 10;
+    public int targetY = 144;
+    public Pose velocity = new Pose(0,0,0);
 
     private double rpm = 0.0;
 
@@ -113,7 +117,7 @@ public class Auto12BlueClose extends OpMode {
             autoDelay.reset();
             resetTimer = false;
         }
-
+        shooter.update(pose,velocity,targetX, targetY,spinner.isReady() && spinner.requestingOuttake);
         follower.update();
         pose = follower.getPose();
         spinner.update();
@@ -133,7 +137,6 @@ public class Auto12BlueClose extends OpMode {
 
             // ================== INITIAL POSITION + TAG SCAN ==================
             case 0:
-                shooter.update(pose, new Pose(0,0,pose.getHeading()), 134, 144);  // default target — override in stages when needed
                 if (spinner.requestingOuttake) break;
                 if (!pathStarted) {
                     follower.followPath(paths.Path1, 1.0, true);
@@ -157,7 +160,6 @@ public class Auto12BlueClose extends OpMode {
                 break;
 
             case 1:
-                shooter.update(pose, new Pose(0,0,pose.getHeading()), 10, 144);  // default target — override in stages when needed
                 aimingEnabled = true;
                 if (!pathStarted) {
                     follower.followPath(paths.Path2, 1.0, true);

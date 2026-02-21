@@ -48,7 +48,9 @@ public class Auto12BlueClosePathTest extends OpMode {
     public static double kF_v = 14.0;
 
     private double rpm = 0.0;
-
+    public int targetX = 10;
+    public int targetY = 144;
+    public Pose velocity = new Pose(0, 0, 0);
     private static final double INTAKE_SWEEP_SPEED = 0.3;
     private static final double INTAKE_PASS2_SPEED = 0.35;
     private static final double AUTO_TOTAL_S = 30.0;
@@ -135,8 +137,7 @@ public class Auto12BlueClosePathTest extends OpMode {
 
             // ================== INITIAL POSITION + TAG SCAN ==================
             case 0:
-                shooter.update(pose, new Pose(0, 0, pose.getHeading()), 72, 144);  // default aim; override per stage if needed
-                if (spinner.requestingOuttake) break;
+                shooter.update(pose,velocity,targetX, targetY,spinner.isReady() && spinner.requestingOuttake);                if (spinner.requestingOuttake) break;
                 if (!pathStarted) {
                     follower.followPath(paths.Path1, 1.0, true);
                     pathStarted = true;
@@ -161,7 +162,6 @@ public class Auto12BlueClosePathTest extends OpMode {
                 break;
 
             case 1:
-                shooter.update(pose, new Pose(0, 0, pose.getHeading()), 10, 144);  // default aim; override per stage if needed
                 aimingEnabled = true;
                 if (!pathStarted) {
                     follower.followPath(paths.Path2, 1.0, true);

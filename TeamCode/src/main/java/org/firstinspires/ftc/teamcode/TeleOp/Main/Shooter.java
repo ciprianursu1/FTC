@@ -65,7 +65,7 @@ public class Shooter {
     double rpm = 0.0;
     double v0 = 0;
     double trajectoryAngle = 70;
-    private static final double RPM_TOL = 25;
+    private static final double RPM_TOL = 40;
     private static final long RPM_STABLE_MS = 80;
     private static final double TURRET_TOL = 2.0;
     private long rpmInRangeSinceMs = 0;

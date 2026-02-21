@@ -60,6 +60,10 @@ public class Auto12RedClose extends OpMode {
     final boolean blue = false;
     int tagID = 0;
 
+    public int targetX = 10;
+    public int targetY = 144;
+    public Pose velocity = new Pose(0, 0, 0);
+
     private Pose pose;
     boolean aimingEnabled = true;
 
@@ -108,7 +112,7 @@ public class Auto12RedClose extends OpMode {
     @Override
     public void loop() {
         shooter.enableLauncher();
-
+        shooter.update(pose,velocity,targetX, targetY,spinner.isReady() && spinner.requestingOuttake);
         if (resetTimer) {
             autoDelay.reset();
             resetTimer = false;
@@ -116,8 +120,6 @@ public class Auto12RedClose extends OpMode {
 
         follower.update();
         pose = follower.getPose();
-
-        shooter.update(pose, new Pose(0,0,pose.getHeading()), 72, 144);  // default target — override in stages when needed
 
         spinner.update();
 
@@ -159,7 +161,6 @@ public class Auto12RedClose extends OpMode {
                 break;
 
             case 1:
-                shooter.update(pose, new Pose(0,0,pose.getHeading()), 134, 144);  // default target — override in stages when needed
                 aimingEnabled = true;
                 if (!pathStarted) {
                     follower.followPath(paths.Path2, 1.0, true);
