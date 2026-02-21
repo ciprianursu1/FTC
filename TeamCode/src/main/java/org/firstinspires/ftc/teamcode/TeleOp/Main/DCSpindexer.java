@@ -125,6 +125,9 @@ public class DCSpindexer {
     public void setReady(boolean ready){
         readyToShoot = ready;
     }
+    public boolean isReady() {
+        return readyToShoot;
+    }
     public boolean spindexerFull(){
         for (int i = 0; i < 3; i++) {
             if (slotColors[i] == ArtifactColor.EMPTY) return false;
