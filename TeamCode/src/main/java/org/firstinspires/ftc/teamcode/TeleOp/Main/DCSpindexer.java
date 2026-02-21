@@ -397,11 +397,13 @@ public class DCSpindexer {
                     outtakeFinished = true;
                     break;
                 }
-                if(transferUp && readyToShoot) {
-                    transfer.setPosition(TRANSFER_UP);
-                    startDelay(300);
-                    transferUp = false;
-                    slotColors[0] = ArtifactColor.EMPTY;
+                if(transferUp) {
+                    if(readyToShoot) {
+                        transfer.setPosition(TRANSFER_UP);
+                        startDelay(300);
+                        transferUp = false;
+                        slotColors[0] = ArtifactColor.EMPTY;
+                    }
                 } else {
                     transfer.setPosition(TRANSFER_DOWN);
                     startDelay(250);
