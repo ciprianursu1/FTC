@@ -103,8 +103,8 @@ public class Shooter {
         updateTurretAim();
         if(aimingEnabled) {
             computeParameters();
-            if (zone == 1 && !isShooting) {
-                adaptRPM();
+            if (zone == 1) {
+                adaptRPM(isShooting);
             }
             updateTrajectoryAngle();
         }
@@ -488,18 +488,20 @@ private void updateTurretAim() {
             flywheel.setPower(0);
         }
     }
-    private void adaptRPM() {
+    private void adaptRPM(boolean isShooting) {
         if (foundSolution) {
-            rpmFeasibleCounter++;
+            if(!isShooting) {
+                rpmFeasibleCounter++;
 
-            if (rpmFeasibleCounter >= RPM_DECAY_LOOPS) {
-                double angleNorm =
-                        (trajectoryAngle - minTrajectoryAngle) /
-                                (maxTrajectoryAngle - minTrajectoryAngle);
+                if (rpmFeasibleCounter >= RPM_DECAY_LOOPS) {
+                    double angleNorm =
+                            (trajectoryAngle - minTrajectoryAngle) /
+                                    (maxTrajectoryAngle - minTrajectoryAngle);
 
-                double decayScale = 1.0 - angleNorm; // low angle → more decay
+                    double decayScale = 1.0 - angleNorm; // low angle → more decay
 
-                flywheelTargetRPM -= RPM_DOWN_STEP * decayScale;
+                    flywheelTargetRPM -= RPM_DOWN_STEP * decayScale;
+                }
             }
         } else {
             rpmFeasibleCounter = 0;
