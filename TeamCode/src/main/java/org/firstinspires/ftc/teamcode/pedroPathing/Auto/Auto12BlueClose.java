@@ -80,7 +80,8 @@ public class Auto12BlueClose extends OpMode {
     @Override
     public void init() {
         follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(22, 125, Math.toRadians(325)));
+        pose = new Pose(22, 125, Math.toRadians(325));
+        follower.setStartingPose(pose);
 
         paths = new Paths(follower);
 

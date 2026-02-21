@@ -9,7 +9,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 @TeleOp(name = "SaveClosePoseBlue", group = "TEST")
 public class SaveClosePoseBlue extends OpMode {
-    Context context = hardwareMap.appContext;
 
     double x = 21;
     double y = 126;
@@ -18,7 +17,7 @@ public class SaveClosePoseBlue extends OpMode {
     int motif = 21;
     public void init(){
         PoseStorage.savePose(
-                context,
+                hardwareMap.appContext,
                 x,
                 y,
                 heading,

@@ -9,7 +9,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 @TeleOp(name = "SaveFarPoseRed", group = "TEST")
 public class SaveFarPoseRed extends OpMode {
-    Context context = hardwareMap.appContext;
 
     double x = 88;
     double y = 8;
@@ -18,7 +17,7 @@ public class SaveFarPoseRed extends OpMode {
     int motif = 21;
     public void init(){
         PoseStorage.savePose(
-                context,
+                hardwareMap.appContext,
                 x,
                 y,
                 heading,

@@ -115,13 +115,12 @@ public class Auto9RedFar extends OpMode {
     /* ===================== INIT ===================== */
     @Override
     public void init() {
-
         follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(88, 8, Math.toRadians(90)));
+        pose = new Pose(56, 8, Math.toRadians(90));
+        follower.setStartingPose(pose);
         paths = new Paths(follower);
         intake = hardwareMap.get(DcMotor.class, "intake");
         batteryVoltage = hardwareMap.voltageSensor.iterator().next();
-        // you had REVERSE in your code
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
         shooter = new Shooter(hardwareMap,"flywheel","tureta","unghituretaoy");
         shooter.init(telemetry,true);

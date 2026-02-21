@@ -117,7 +117,8 @@ public class Auto6RedFar extends OpMode {
     public void init() {
 
         follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(88, 8, Math.toRadians(90)));
+        pose = new Pose(88, 8, Math.toRadians(90));
+        follower.setStartingPose(pose);
         paths = new Paths(follower);
         intake = hardwareMap.get(DcMotor.class, "intake");
         batteryVoltage = hardwareMap.voltageSensor.iterator().next();

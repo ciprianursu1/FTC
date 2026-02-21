@@ -80,7 +80,8 @@ public class Auto12RedClose extends OpMode {
     @Override
     public void init() {
         follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(22, 125, Math.toRadians(325)));
+        pose = new Pose(122, 125, Math.toRadians(215));
+        follower.setStartingPose(pose);
 
         paths = new Paths(follower);
 
