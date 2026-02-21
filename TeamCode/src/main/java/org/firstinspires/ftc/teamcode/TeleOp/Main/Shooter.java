@@ -92,7 +92,7 @@ public class Shooter {
             turret.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         }
         flywheel.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
-        flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, new PIDFCoefficients(30, 2.3, 4, 14.0));
+        flywheel.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, new PIDFCoefficients(30, 0, 0, 14.0));
         turret.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         turret.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         trajectoryAngleModifier.setDirection(Servo.Direction.REVERSE);
