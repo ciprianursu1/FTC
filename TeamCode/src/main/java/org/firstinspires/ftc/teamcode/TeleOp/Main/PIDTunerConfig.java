@@ -12,5 +12,7 @@ public class PIDTunerConfig {
     @Sorter(sort = 2)
     public static double kD = 0.0;
     @Sorter(sort = 3)
+    public static double kF = 0.0;
+    @Sorter(sort = 4)
     public static int targetTicks = 0;
 }
