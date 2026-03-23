@@ -1,11 +1,9 @@
 package org.firstinspires.ftc.teamcode.TeleOp.Main;
 
-import com.bylazar.panels.Panels;
 import com.bylazar.telemetry.PanelsTelemetry;
 import com.bylazar.telemetry.TelemetryManager;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 @TeleOp(name = "PID Tuner (Panels)", group = "TEST")

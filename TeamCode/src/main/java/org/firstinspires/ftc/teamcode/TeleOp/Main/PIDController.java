@@ -4,9 +4,9 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 
 public class PIDController {
     private double kP, kI, kD;
-    private double errorSum = 0;
-    private double lastMeasurement = 0;
-    private double lastError = 0;
+    private double errorSum;
+    private double lastMeasurement;
+    private double lastError;
     private double output = 0;
     private double integralMax = 1.0 , integralMin = -1.0;
     private double deadband = 1;
