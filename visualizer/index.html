@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FRI Pedro Pathing Visualizer</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <section class="workbench">
+        <header class="topbar">
+          <div>
+            <h1>FRI Pedro Visualizer</h1>
+            <p>Landscape field view with top-left rotated 144 in x 288 in coordinates.</p>
+          </div>
+          <div class="toolbar" aria-label="Path tools">
+            <button id="mirrorButton" type="button" title="Mirror left/right across the full FRI field">↔️ Mirror</button>
+            <button id="toggleGridButton" type="button" title="Show or hide the grid">▦ Grid On</button>
+            <button id="clearButton" type="button" title="Clear all points">🗑️ Clear</button>
+          </div>
+        </header>
+
+        <div class="field-wrap">
+          <canvas id="fieldCanvas" width="1440" height="720" aria-label="FRI field path canvas"></canvas>
+          <div class="history-group" aria-label="History controls">
+            <button id="undoButton" type="button" title="Undo">↩️</button>
+            <button id="redoButton" type="button" title="Redo">↪️</button>
+          </div>
+          <div class="hint">Right-click to add. Start on robot, hold Shift to move and snap. Drag heading handle to aim.</div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <section>
+          <h2>Selected Pose</h2>
+          <div class="form-grid">
+            <label>
+              X
+              <input id="xInput" type="number" step="0.001">
+            </label>
+            <label>
+              Y
+              <input id="yInput" type="number" step="0.001">
+            </label>
+            <label>
+              Heading
+              <input id="headingInput" type="number" step="1">
+            </label>
+            <label>
+              Name
+              <input id="nameInput" type="text" maxlength="24">
+            </label>
+            <label>
+              Robot length
+              <input id="robotLengthInput" type="number" min="1" max="36" step="0.5">
+            </label>
+            <label>
+              Robot width
+              <input id="robotWidthInput" type="number" min="1" max="36" step="0.5">
+            </label>
+            <label>
+              Grid size
+              <input id="gridSizeInput" type="number" min="1" max="72" step="1">
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="deletePointButton" type="button">🗑️ Delete</button>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-header">
+            <h2>Path</h2>
+            <button id="addPointButton" type="button" title="Add a point at the field center">➕ Point</button>
+          </div>
+          <div class="stats">
+            <span id="pointCount">0 poses</span>
+            <span id="pathLength">0.0 in</span>
+          </div>
+          <ol id="poseList" class="pose-list"></ol>
+        </section>
+
+        <section>
+          <h2>Import Java</h2>
+          <textarea id="importText" spellcheck="false" placeholder="Paste Pedro Pose/BezierLine code here"></textarea>
+          <button id="importButton" type="button">⬇️ Import Paths</button>
+        </section>
+
+        <section>
+          <h2>Export</h2>
+          <div class="export-options">
+            <label>
+              Path name
+              <input id="pathNameInput" type="text" value="Path1">
+            </label>
+            <label>
+              Speed
+              <input id="speedInput" type="number" step="0.05" value="1.0">
+            </label>
+          </div>
+          <textarea id="exportText" readonly spellcheck="false"></textarea>
+          <button id="copyButton" type="button">📋 Copy Java</button>
+        </section>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

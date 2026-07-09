@@ -4,9 +4,6 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
-import org.firstinspires.ftc.teamcode.TeleOp.SensorV2;
-import org.firstinspires.ftc.teamcode.TeleOp.SensorV3;
-
 import java.util.Arrays;
 
 public class Spindexer {

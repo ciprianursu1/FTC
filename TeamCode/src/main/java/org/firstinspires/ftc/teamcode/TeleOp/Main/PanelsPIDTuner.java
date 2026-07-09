@@ -21,7 +21,8 @@ public class PanelsPIDTuner extends OpMode {
         pid = new PIDController(
                 PIDTunerConfig.kP,
                 PIDTunerConfig.kI,
-                PIDTunerConfig.kD
+                PIDTunerConfig.kD,
+                PIDTunerConfig.kF
         );
     }
 
@@ -30,7 +31,8 @@ public class PanelsPIDTuner extends OpMode {
         pid.setCoefficients(
                 PIDTunerConfig.kP,
                 PIDTunerConfig.kI,
-                PIDTunerConfig.kD
+                PIDTunerConfig.kD,
+                PIDTunerConfig.kF
         );
         int currentTicks = motor.getCurrentPosition();
         double power = pid.update(

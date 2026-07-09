@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.TeleOp;
+package org.firstinspires.ftc.teamcode.TeleOp.Main;
 
 import android.graphics.Color;
 
@@ -6,7 +6,7 @@ import com.qualcomm.hardware.rev.RevColorSensorV3;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 import com.qualcomm.robotcore.hardware.SwitchableLight;
-
+import org.firstinspires.ftc.teamcode.TeleOp.Main.SensorV2;
 import org.firstinspires.ftc.teamcode.TeleOp.Main.Sample;
 
 import java.util.Arrays;

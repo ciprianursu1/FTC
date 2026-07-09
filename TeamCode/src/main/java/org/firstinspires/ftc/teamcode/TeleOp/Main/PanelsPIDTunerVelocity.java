@@ -15,7 +15,7 @@ public class PanelsPIDTunerVelocity extends OpMode {
     private TelemetryManager telemetryM;
     @Override
     public void init() {
-        motor = hardwareMap.get(DcMotorEx.class, "spinner");
+        motor = hardwareMap.get(DcMotorEx.class, "flywheel");
         motor.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         motor.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
         motor.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
