@@ -218,7 +218,8 @@ public class TeleOpTemplate extends OpMode {
                 new double[]{(alliance ? RobotConfig.BLUE_PRIMARY_TARGET_X : RobotConfig.RED_PRIMARY_TARGET_X), RobotConfig.PRIMARY_TARGET_Y},
                 new double[]{RobotConfig.SECONDARY_TARGET_X, RobotConfig.SECONDARY_TARGET_Y},
                 alliance,
-                false
+                false,
+                telemetry
         );
 
         limelight = new Limelight(rawLimelight3A, rawIMU);

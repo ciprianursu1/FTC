@@ -2,6 +2,8 @@ package org.firstinspires.ftc.teamcode.Subsystems;
 
 import com.qualcomm.robotcore.hardware.Servo;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
 public class TransferServo {
     Servo transferServo;
     private final double posUp;
@@ -37,5 +39,12 @@ public class TransferServo {
         } else {
             transferServo.setPosition(posDisable);
         }
+    }
+    public void appendTelemetry(Telemetry telemetry) {
+        telemetry.addLine("--- Transfer Servo ---");
+        telemetry.addData("Transfer Enabled", enabled);
+        telemetry.addData("Transfer State", goUp ? "UP" : "DOWN");
+        telemetry.addData("Transfer Position", "%.3f", transferServo.getPosition());
+        telemetry.addData("Transfer Up/Down/Disabled", "%.3f / %.3f / %.3f", posUp, posDown, posDisable);
     }
 }

@@ -5,9 +5,12 @@ import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.hardware.Gamepad;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
 public class Robot {
     MecanumDrive drive;
     public ArtifactHandler artifactHandler;
+    Telemetry telemetry;
     Gamepad gamepad1;
     Gamepad gamepad2;
     PinpointLocalizer pinpoint;
@@ -23,8 +26,12 @@ public class Robot {
     double[] secondaryTargetPos;
     int zone = 0;
     public Robot(MecanumDrive drive, ArtifactHandler artifactHandler, Gamepad gamepad1, Gamepad gamepad2, PinpointLocalizer pinpoint, Pose resetPose,double[][][] autoEnableAimZones, double[][][] autoEnableAimZoneTargets,double[] primaryTargetPos,double[] secondaryTargetPos,boolean alliance, boolean isAuto){
+        this(drive, artifactHandler, gamepad1, gamepad2, pinpoint, resetPose, autoEnableAimZones, autoEnableAimZoneTargets, primaryTargetPos, secondaryTargetPos, alliance, isAuto, null);
+    }
+    public Robot(MecanumDrive drive, ArtifactHandler artifactHandler, Gamepad gamepad1, Gamepad gamepad2, PinpointLocalizer pinpoint, Pose resetPose,double[][][] autoEnableAimZones, double[][][] autoEnableAimZoneTargets,double[] primaryTargetPos,double[] secondaryTargetPos,boolean alliance, boolean isAuto, Telemetry telemetry){
         this.drive = drive;
         this.artifactHandler = artifactHandler;
+        this.telemetry = telemetry;
         this.gamepad1 = gamepad1;
         this.gamepad2 = gamepad2;
         this.pinpoint = pinpoint;
@@ -45,6 +52,10 @@ public class Robot {
             drive.update(pose.getHeading());
         }
         artifactHandler.update(manualSort);
+        updateTelemetry();
+    }
+    public void setTelemetry(Telemetry telemetry) {
+        this.telemetry = telemetry;
     }
     private double sign(double x1,double y1,double x2,double y2,double x3,double y3){
         return (x1-x3)*(y2-y3)-(x2-x3)*(y1-y3);
@@ -102,6 +113,22 @@ public class Robot {
     public void init(){
         if(!isAuto) drive.init();
         artifactHandler.init(isAuto);
+    }
+    private void updateTelemetry() {
+        if(telemetry == null) return;
+        telemetry.addLine("=== Robot ===");
+        telemetry.addData("Robot Auto", isAuto);
+        telemetry.addData("Robot Alliance", alliance ? "BLUE" : "RED");
+        telemetry.addData("Robot Zone", zone);
+        telemetry.addData("Robot Intake Toggle", intakeToggle);
+        telemetry.addData("Robot Manual Sort", manualSort);
+        telemetry.addData("Robot Pose", pose == null ? "null" : String.format("(%.2f, %.2f, %.2f deg)", pose.getX(), pose.getY(), Math.toDegrees(pose.getHeading())));
+        telemetry.addData("Robot Reset Pose", "(%.2f, %.2f, %.2f deg)", resetPose.getX(), resetPose.getY(), Math.toDegrees(resetPose.getHeading()));
+        telemetry.addData("Robot Primary Target", "%.2f / %.2f", primaryTargetPos[0], primaryTargetPos[1]);
+        telemetry.addData("Robot Secondary Target", "%.2f / %.2f", secondaryTargetPos[0], secondaryTargetPos[1]);
+        drive.appendTelemetry(telemetry);
+        artifactHandler.appendTelemetry(telemetry);
+        telemetry.update();
     }
 }
 // WORK IN PROGRESS

@@ -75,12 +75,10 @@ public abstract class FreestyleAutoBase extends OpMode {
         pose = follower.getPose();
         pinpointLocalizer.setPose(pose); //Limelight Correction is not needed for the 30s auto period
         runPathState();
-        robot.update();
         limelight.setTurretYawOffset(robot.artifactHandler.getTurretAngle(), AngleUnit.DEGREES);
         limelight.update();
 
-
-
+        telemetry.addLine("=== Auto Path ===");
         telemetry.addData("Path state", pathState);
         telemetry.addData("Busy", follower.isBusy());
         telemetry.addData("LL turret yaw", limelight.getTurretYawOffset());
@@ -88,7 +86,7 @@ public abstract class FreestyleAutoBase extends OpMode {
         telemetry.addData("X", pose.getX());
         telemetry.addData("Y", pose.getY());
         telemetry.addData("Heading", Math.toDegrees(pose.getHeading()));
-        telemetry.update();
+        robot.update();
     }
 
     @Override
@@ -231,7 +229,8 @@ public abstract class FreestyleAutoBase extends OpMode {
                 new double[]{RobotConfig.BLUE_PRIMARY_TARGET_X, RobotConfig.PRIMARY_TARGET_Y},
                 new double[]{RobotConfig.SECONDARY_TARGET_X, RobotConfig.SECONDARY_TARGET_Y},
                 true,
-                true
+                true,
+                telemetry
         );
     }
 }

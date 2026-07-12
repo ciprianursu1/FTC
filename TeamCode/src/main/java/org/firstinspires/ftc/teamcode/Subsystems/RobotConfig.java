@@ -42,11 +42,11 @@ public final class RobotConfig {
     public static final double SLOT_STALL_MIN_MOVEMENT_DEG = 2.0;
     public static final int[] VERIFICATION_SENSOR_TO_SLOT = {0,1,2};
     public static final double TRANSFER_UP = 0.02;
-    public static final double TRANSFER_DOWN = 0.28;
+    public static final double TRANSFER_DOWN = 0.29;
     public static final double HOOD_MAX_ANGLE = 70;
     public static final double HOOD_MIN_ANGLE = 50;
     public static final double TURRET_POWER = 0.5;
-    public static final double TURRET_TICKS_PER_REV = 384.5;
+    public static final double TURRET_TICKS_PER_REV = 384.5 * (75.0 / 26.0);
     public static final double TURRET_LIMIT_LEFT = 110;
     public static final double TURRET_LIMIT_RIGHT = -110;
     public static final double TURRET_START_ANGLE = -180;

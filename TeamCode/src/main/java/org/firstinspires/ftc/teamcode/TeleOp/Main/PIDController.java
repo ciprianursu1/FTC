@@ -89,6 +89,13 @@ public class PIDController {
     public double getkI() { return kI; }
     public double getkD() { return kD; }
     public double getkF() { return kF; }
+    public double getErrorSum() { return errorSum; }
+    public double getLastMeasurement() { return lastMeasurement; }
+    public double getLastError() { return lastError; }
+    public double getOutput() { return output; }
+    public double getIntegralMax() { return integralMax; }
+    public double getIntegralMin() { return integralMin; }
+    public double getDeadband() { return deadband; }
 
     public void reset() {
         errorSum = 0;

@@ -3,6 +3,11 @@ package org.firstinspires.ftc.teamcode.Subsystems;
 import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.util.ElapsedTime;
+
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
+import java.util.Arrays;
+
 // ADD INTAKE
 // ADD MANUAL SHOOTING ORDER
 public class ArtifactHandler {
@@ -29,6 +34,7 @@ public class ArtifactHandler {
     boolean transferBlocked = false;
     boolean intakeBlocked = false;
     boolean shoot = false;
+    boolean lastShootRequest = false;
     boolean enableAiming = false;
     boolean turretTargetOverride = false;
     double turretTargetOverrideAngle = 0;
@@ -114,8 +120,15 @@ public class ArtifactHandler {
         return turretSwivel.getCurrentAngle();
     }
     public void requestShoot(boolean shoot){
-        if(!shoot) transferBlocked = false;
-        this.shoot = shoot && !transferBlocked;
+        if(!shoot) {
+            transferBlocked = false;
+            if(lastShootRequest) requestOuttake(false);
+            this.shoot = false;
+            lastShootRequest = false;
+            return;
+        }
+        lastShootRequest = true;
+        this.shoot = !transferBlocked;
         if(this.shoot) clearTurretTargetAngleOverride();
         if(!spindexer.getOuttakeState() && this.shoot) requestOuttake(true);
     }
@@ -129,11 +142,7 @@ public class ArtifactHandler {
         calculateShooterParameters();
         if(intakeBlocked) spindexer.enable(false);
         spindexer.update();
-        transferServo.update();
         hood.update();
-        intake.update();
-        flywheel.update();
-        turretSwivel.update();
         if(spindexer.getOuttakeState()){
             turnOnIntake(true,false);
             flywheel.enable(true);
@@ -188,6 +197,10 @@ public class ArtifactHandler {
                 turretSwivel.enable(false);
             }
         }
+        intake.update();
+        flywheel.update();
+        transferServo.update();
+        turretSwivel.update();
     }
     public void init(boolean isAuto) {
         spindexer.init(isAuto);
@@ -321,6 +334,35 @@ public class ArtifactHandler {
             hoodAngle = hood.getMinAngle() - 1;
         }
 
+    }
+    public void appendTelemetry(Telemetry telemetry) {
+        telemetry.addLine("=== Artifact Handler ===");
+        telemetry.addData("Handler Shoot Requested", shoot);
+        telemetry.addData("Handler Aim Enabled", enableAiming);
+        telemetry.addData("Handler Turret Override", turretTargetOverride);
+        telemetry.addData("Handler Turret Override Angle", "%.2f deg", turretTargetOverrideAngle);
+        telemetry.addData("Handler Target XYZ", "%.2f / %.2f / %.2f", targetX, targetY, targetZ);
+        telemetry.addData("Handler Turret Offset XY", "%.4f / %.4f m", turretOffsetX, turretOffsetY);
+        telemetry.addData("Handler Pose", pose == null ? "null" : String.format("(%.2f, %.2f, %.2f deg)", pose.getX(), pose.getY(), Math.toDegrees(pose.getHeading())));
+        telemetry.addData("Handler Hood Angle", "%.2f deg", hoodAngle);
+        telemetry.addData("Handler Motif", Arrays.toString(motif));
+        telemetry.addData("Handler Motif Index/Next", "%d / %d", motifIndex, nextColor);
+        telemetry.addData("Handler Transferred", transferred);
+        telemetry.addData("Handler Verifying Transfer", verifyingTransfer);
+        telemetry.addData("Handler Verification Ready", verificationReady);
+        telemetry.addData("Handler Retrying Transfer", retryingTransfer);
+        telemetry.addData("Handler Transfer Blocked", transferBlocked);
+        telemetry.addData("Handler Intake Blocked", intakeBlocked);
+        telemetry.addData("Handler Transfer Retries", "%d / %d", transferRetries, maxTransferRetries);
+        telemetry.addData("Handler Transfer Timer", "%.0f ms", transferServoTimer.milliseconds());
+        telemetry.addData("Handler Transfer Delay", "%d ms", transferServoDelay);
+        telemetry.addData("Handler Verify Delay", "%d ms", transferVerifyDelay);
+        spindexer.appendTelemetry(telemetry);
+        transferServo.appendTelemetry(telemetry);
+        hood.appendTelemetry(telemetry);
+        intake.appendTelemetry(telemetry);
+        flywheel.appendTelemetry(telemetry);
+        turretSwivel.appendTelemetry(telemetry);
     }
 
 

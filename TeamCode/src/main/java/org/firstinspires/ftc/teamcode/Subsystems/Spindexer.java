@@ -2,6 +2,8 @@ package org.firstinspires.ftc.teamcode.Subsystems;
 
 import com.qualcomm.robotcore.util.ElapsedTime;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
 import java.util.Arrays;
 
 public class Spindexer {
@@ -80,6 +82,7 @@ public class Spindexer {
             if(verificationSensorToSlot[i] >= 0 && verificationSensorToSlot[i] < sensedSlotColor.length) {
                 sensedSlotColor[verificationSensorToSlot[i]] = classifySlot(verificationColorSensors[i]);
             }
+            verificationColorSensors[i].enable(false);
         }
     }
     public boolean isCurrentSlotDetectedByVerification(){
@@ -117,8 +120,15 @@ public class Spindexer {
             slotChanger.enable(false);
             slotChanger.update();
             colorSensor.enable(false);
+            colorSensor.update();
+            for (ColorSensor verificationColorSensor : verificationColorSensors) {
+                verificationColorSensor.enable(false);
+            }
+            sampleIndex = 0;
+            sampleTimer.reset();
             return;
         }
+        slotChanger.enable(enabled);
         int currentSlot = slotChanger.getSlot() - 1;
         if(!slotChanger.isBusy() && !slotChanger.isOuttake() && !isFull()) {
             colorSensor.enable(true);
@@ -157,6 +167,24 @@ public class Spindexer {
             sampleTimer.reset();
         }
         slotChanger.update();
+    }
+    public void appendTelemetry(Telemetry telemetry) {
+        telemetry.addLine("--- Spindexer ---");
+        telemetry.addData("Spindexer Enabled", enabled);
+        telemetry.addData("Spindexer Full", isFull());
+        telemetry.addData("Spindexer Outtake", getOuttakeState());
+        telemetry.addData("Spindexer Current Slot", slotChanger.getSlot());
+        telemetry.addData("Spindexer Current Color", getCurrentSlotColor());
+        telemetry.addData("Spindexer Slot Colors", Arrays.toString(slotColor));
+        telemetry.addData("Spindexer Verification Colors", Arrays.toString(sensedSlotColor));
+        telemetry.addData("Spindexer Samples", Arrays.toString(samples));
+        telemetry.addData("Spindexer Sample Index/Size", "%d / %d", sampleIndex, sampleSize);
+        telemetry.addData("Spindexer Sample Timer", "%.0f / %d ms", sampleTimer.milliseconds(), samplingDelay);
+        colorSensor.appendTelemetry(telemetry, "Main Color");
+        for(int i = 0; i < verificationColorSensors.length; i++) {
+            verificationColorSensors[i].appendTelemetry(telemetry, "Verify Color " + (i + 1));
+        }
+        slotChanger.appendTelemetry(telemetry);
     }
 }
 // WORK IN PROGRESS
