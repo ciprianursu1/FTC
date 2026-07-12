@@ -49,7 +49,16 @@ public class ClosedLoopDC {
         }
     }
     public boolean isOnTarget(){
-        return pid != null && pid.isOnTarget();
+        return pid != null && Math.abs(getTargetError()) < pid.getDeadband();
+    }
+    public double getTargetError(){
+        double current = getCurrentPosition();
+        if(angleMode) return wrapAngle(lastTarget - current);
+        return lastTarget - current;
+    }
+    public double getPositionTolerance(){
+        if(pid == null) return 0;
+        return pid.getDeadband();
     }
     public void setAngleMode(boolean angleMode) {
         if (this.angleMode != angleMode) {

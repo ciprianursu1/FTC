@@ -52,7 +52,7 @@ public final class RobotConfig {
     public static final double TURRET_START_ANGLE = -180;
     public static final PIDController turretPID = new PIDController(0.01,0,0.0002,0);
     public static final double TARGET_Z = 0.75;
-    public static final double FLYWHEEL_TICKS_PER_REV = 28*1.4;
+    public static final double FLYWHEEL_TICKS_PER_REV = 28;
     public static final double FLYWHEEL_RPM_DEADBAND = 10.0;
     public static final double FLYWHEEL_RADIUS_METERS = 0.048;
     public static final double FLYWHEEL_EFFICIENCY = 0.43;
@@ -95,7 +95,7 @@ public final class RobotConfig {
     public static final double AUTO_PATH_POWER = 1.0;
     public static final double AUTO_INTAKE_PATH_POWER = 0.5;
 
-    public static final int DEFAULT_MOTIF_TAG = 23;
+    public static final int DEFAULT_MOTIF_TAG = 21;
 
     public static final double INCHES_PER_METER = 100.0 / 2.54;
     public static final double LIMELIGHT_OFFSET_X_METERS = -65.5 / 1000.0;

@@ -69,6 +69,7 @@ public class AutoBlueMiddle extends FreestyleAutoBase {
                     resetMotifTimer = false;
                 }
                 if(motifFallbackTimer.seconds() > RobotConfig.MOTIF_FALLBACK_TIME){
+                    motifTag = RobotConfig.DEFAULT_MOTIF_TAG;
                     robot.artifactHandler.setMotif(RobotConfig.DEFAULT_MOTIF);
                     robot.artifactHandler.clearTurretTargetAngleOverride();
                     robot.artifactHandler.setTargetX(RobotConfig.SECONDARY_TARGET_X);
@@ -80,6 +81,7 @@ public class AutoBlueMiddle extends FreestyleAutoBase {
                 if(limelight.isFreshData()){
                     switch(limelight.getTagID()){
                         case 21:
+                            motifTag = 21;
                             robot.artifactHandler.setMotif(new int[]{1,2,2});
                             robot.artifactHandler.clearTurretTargetAngleOverride();
                             robot.artifactHandler.setTargetX(RobotConfig.SECONDARY_TARGET_X);
@@ -88,6 +90,7 @@ public class AutoBlueMiddle extends FreestyleAutoBase {
                             followPath(paths.Path2, 2,RobotConfig.AUTO_PATH_POWER);
                             break;
                         case 22:
+                            motifTag = 22;
                             robot.artifactHandler.setMotif(new int[]{2,1,2});
                             robot.artifactHandler.clearTurretTargetAngleOverride();
                             robot.artifactHandler.setTargetX(RobotConfig.SECONDARY_TARGET_X);
@@ -96,6 +99,7 @@ public class AutoBlueMiddle extends FreestyleAutoBase {
                             followPath(paths.Path2, 2,RobotConfig.AUTO_PATH_POWER);
                             break;
                         case 23:
+                            motifTag = 23;
                             robot.artifactHandler.setMotif(new int[]{2,2,1});
                             robot.artifactHandler.clearTurretTargetAngleOverride();
                             robot.artifactHandler.setTargetX(RobotConfig.SECONDARY_TARGET_X);

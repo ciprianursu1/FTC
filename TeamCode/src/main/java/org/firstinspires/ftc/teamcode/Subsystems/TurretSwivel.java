@@ -20,10 +20,8 @@ public class TurretSwivel {
         return angle - 180;
     }
     private double clampAngle(double angle){
-        if(angle > limitLeft || angle < limitRight) {
-            if(Math.abs(currentAngle - limitRight) > Math.abs(currentAngle - limitLeft)) angle = limitLeft;
-            else angle = limitRight;
-        }
+        if(angle > limitLeft) return limitLeft;
+        if(angle < limitRight) return limitRight;
         return angle;
     }
     public TurretSwivel(ClosedLoopDC turret, double limitLeft, double limitRight, double startAngle){
@@ -73,7 +71,9 @@ public class TurretSwivel {
         targetAngle = wrapAngle(angle);
     }
     public boolean isOnTarget(){
-        return turret.isOnTarget();
+        currentAngle = getCurrentAngle();
+        lastCommandedAngle = clampAngle(targetAngle);
+        return Math.abs(wrapAngle(lastCommandedAngle - currentAngle)) < turret.getPositionTolerance();
     }
     public void appendTelemetry(Telemetry telemetry) {
         telemetry.addLine("--- Turret Swivel ---");

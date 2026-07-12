@@ -69,21 +69,25 @@ public class Limelight {
         LLResult result = limelight.getLatestResult();
         if(result != null && result.isValid()) {
             double timestamp = result.getTimestamp();
-            freshData = timestamp > lastTimestamp;
+            if(timestamp <= lastTimestamp) return;
             lastTimestamp = timestamp;
             if (motifMode) {
                 if (!result.getFiducialResults().isEmpty()) {
                     tagID = result.getFiducialResults().get(0).getFiducialId();
+                    freshData = true;
                 }
             } else {
+                Pose3D pose3D = result.getBotpose_MT2();
+                if(pose3D == null) return;
                 pose = limelightToPedro(
-                        result.getBotpose_MT2(),
+                        pose3D,
                         turretYawOffset,
                         turretOffsetX,
                         turretOffsetY,
                         limelightOffsetX,
                         limelightOffsetY
                 );
+                freshData = true;
             }
         }
     }
@@ -107,9 +111,7 @@ public class Limelight {
             double turretOffsetY,
             double limelightOffsetX,
             double limelightOffsetY) {
-        if (limelightPose3D == null) {
-            return new Pose(0, 0, 0);
-        }
+        if (limelightPose3D == null) return null;
         double xInches = limelightPose3D.getPosition().toUnit(DistanceUnit.INCH).x;
         double yInches = limelightPose3D.getPosition().toUnit(DistanceUnit.INCH).y;
         double headingRadians = limelightPose3D.getOrientation().getYaw(AngleUnit.RADIANS) - Math.toRadians(turretYawOffset);

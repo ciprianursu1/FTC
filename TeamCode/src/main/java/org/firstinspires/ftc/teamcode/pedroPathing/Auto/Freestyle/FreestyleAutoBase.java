@@ -8,6 +8,7 @@ import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
 import com.qualcomm.robotcore.hardware.Servo;
@@ -40,6 +41,7 @@ public abstract class FreestyleAutoBase extends OpMode {
     protected boolean pathStarted = false;
     protected Pose pose;
     protected ElapsedTime timer;
+    protected int motifTag = RobotConfig.DEFAULT_MOTIF_TAG;
 
     protected abstract Pose getStartPose();
     protected abstract void initPaths();
@@ -99,7 +101,7 @@ public abstract class FreestyleAutoBase extends OpMode {
                     pose.getY(),
                     pose.getHeading(),
                     true,
-                    RobotConfig.DEFAULT_MOTIF_TAG
+                    motifTag
             );
         }
     }
@@ -134,6 +136,10 @@ public abstract class FreestyleAutoBase extends OpMode {
         DcMotor motorRawIntake = hardwareMap.get(DcMotor.class, RobotConfig.INTAKE);
         DcMotorEx motorRawFlywheel = hardwareMap.get(DcMotorEx.class, RobotConfig.FLYWHEEL);
         DcMotorEx motorRawTurret = hardwareMap.get(DcMotorEx.class, RobotConfig.TURRET);
+        servoEjector.setDirection(Servo.Direction.REVERSE);
+        servoEjector.setPosition(RobotConfig.TRANSFER_DOWN);
+        servoHood.setPosition(0);
+        motorRawIntake.setDirection(DcMotorSimple.Direction.REVERSE);
 
         MecanumDrive mecanumDrive = new MecanumDrive(
                 gamepad1,

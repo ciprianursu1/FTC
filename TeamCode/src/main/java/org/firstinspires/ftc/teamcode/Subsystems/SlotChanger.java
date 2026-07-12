@@ -19,6 +19,11 @@ public class SlotChanger {
     boolean stalled = false;
     double stallTimeoutMs;
     double stallMinMovementDeg;
+    private double wrapAngle(double angle) {
+        angle = angle % 360;
+        if(angle < 0) angle += 360;
+        return angle;
+    }
     public SlotChanger(ClosedLoopDC spindexerMotor, int slots, double offset, double stallTimeoutMs, double stallMinMovementDeg){
         this.spindexerMotor = spindexerMotor;
         this.slots = slots;
@@ -30,6 +35,8 @@ public class SlotChanger {
         spindexerMotor.init(isAuto);
         spindexerMotor.setAngleMode(true);
         degPerSlot = 360.0 / slots;
+        currentSlot = (int) Math.round(wrapAngle(spindexerMotor.getCurrentPosition()) / degPerSlot) % slots;
+        targetSlot = currentSlot;
         lastPosition = spindexerMotor.getCurrentPosition();
     }
     public void setSlots(int slots){
@@ -58,6 +65,9 @@ public class SlotChanger {
     }
     public boolean isOuttake() {
         return  outtake;
+    }
+    public boolean isIntakeAligned(){
+        return !outtake && !isBusy();
     }
     public void setOffset(double offset){
         this.offset = offset;

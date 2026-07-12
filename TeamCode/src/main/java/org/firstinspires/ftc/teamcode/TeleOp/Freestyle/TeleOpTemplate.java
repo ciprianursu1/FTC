@@ -72,6 +72,8 @@ public class TeleOpTemplate extends OpMode {
     ClosedLoopDC turretClosedLoop;
     TurretSwivel turretSwivel;
     ArtifactHandler artifactHandler;
+    double lastVisionCorrectionTime = 0;
+    boolean inventoryScanned = false;
 
     @Override
     public void init() {
@@ -225,8 +227,10 @@ public class TeleOpTemplate extends OpMode {
         limelight = new Limelight(rawLimelight3A, rawIMU);
         limelight.init(startPose.getHeading(), AngleUnit.RADIANS);
         limelight.changePipeline(RobotConfig.LIMELIGHT_POSITION_PIPELINE, false);
+        lastVisionCorrectionTime = getRuntime();
 
         robot.init();
+        inventoryScanned = spindexer.scanAllSlotsWhenIntakeAligned();
 
         switch (tagID) {
             case 21:
@@ -242,14 +246,54 @@ public class TeleOpTemplate extends OpMode {
     }
 
     @Override
+    public void start() {
+        lastVisionCorrectionTime = getRuntime();
+    }
+
+    @Override
     public void loop() {
         pinpointLocalizer.update();
         limelight.setTurretYawOffset(robot.artifactHandler.getTurretAngle(), AngleUnit.DEGREES);
         limelight.update();
         if (limelight.isFreshData()) {
-            pinpointLocalizer.setPose(limelight.getPose());
+            pinpointLocalizer.setPose(getVisionCorrectedPose(pinpointLocalizer.getPose(), limelight.getPose()));
         }
 
         robot.update();
+        if(!inventoryScanned) inventoryScanned = spindexer.scanAllSlotsWhenIntakeAligned();
+    }
+
+    private Pose getVisionCorrectedPose(Pose odometryPose, Pose visionPose) {
+        if(odometryPose == null || visionPose == null) return odometryPose;
+        double dx = visionPose.getX() - odometryPose.getX();
+        double dy = visionPose.getY() - odometryPose.getY();
+        double distance = Math.hypot(dx, dy);
+        double headingError = wrapRadians(visionPose.getHeading() - odometryPose.getHeading());
+        if(distance > RobotConfig.VISION_MAX_JUMP_INCHES) return odometryPose;
+        if(Math.abs(Math.toDegrees(headingError)) > RobotConfig.VISION_MAX_HEADING_JUMP_DEG) return odometryPose;
+
+        double now = getRuntime();
+        double dt = Math.max(now - lastVisionCorrectionTime, 0.02);
+        double blendedDx = dx * RobotConfig.VISION_BLEND;
+        double blendedDy = dy * RobotConfig.VISION_BLEND;
+        double correctionDistance = Math.hypot(blendedDx, blendedDy);
+        double maxCorrection = RobotConfig.VISION_MAX_SPEED_INCHES * dt;
+        if(correctionDistance > maxCorrection && correctionDistance > 0) {
+            double scale = maxCorrection / correctionDistance;
+            blendedDx *= scale;
+            blendedDy *= scale;
+        }
+        lastVisionCorrectionTime = now;
+        return new Pose(
+                odometryPose.getX() + blendedDx,
+                odometryPose.getY() + blendedDy,
+                wrapRadians(odometryPose.getHeading() + headingError * RobotConfig.VISION_BLEND)
+        );
+    }
+
+    private double wrapRadians(double angle) {
+        angle = (angle + Math.PI) % (2 * Math.PI);
+        if(angle < 0) angle += 2 * Math.PI;
+        return angle - Math.PI;
     }
 }

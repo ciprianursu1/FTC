@@ -49,6 +49,7 @@ public class Spindexer {
     }
     private int classifySlot(ColorSensor sensor){
         float[] hsv = sensor.getHSV();
+        if(sensor.getAlpha() < tuneV3.minAlpha) return 0;
         if(hsv[1] < tuneV3.minSaturation) return 0;
         if(hsv[0] > tuneV3.greenHueMin && hsv[0] < tuneV3.greenHueMax){
             return 1;
@@ -74,16 +75,31 @@ public class Spindexer {
     public int getCurrentSlotColor() {
         return slotColor[slotChanger.getSlot() - 1];
     }
+    public void setInventory(int[] inventory){
+        Arrays.fill(slotColor, 0);
+        if(inventory == null) return;
+        for(int i = 0; i < slotColor.length && i < inventory.length; i++){
+            if(inventory[i] == 1 || inventory[i] == 2) slotColor[i] = inventory[i];
+        }
+    }
     public void scanSlotsForVerification(){
         Arrays.fill(sensedSlotColor, 0);
         for(int i = 0; i < verificationColorSensors.length && i < sensedSlotColor.length; i++){
             verificationColorSensors[i].enable(true);
             verificationColorSensors[i].update();
-            if(verificationSensorToSlot[i] >= 0 && verificationSensorToSlot[i] < sensedSlotColor.length) {
+            if(i < verificationSensorToSlot.length && verificationSensorToSlot[i] >= 0 && verificationSensorToSlot[i] < sensedSlotColor.length) {
                 sensedSlotColor[verificationSensorToSlot[i]] = classifySlot(verificationColorSensors[i]);
             }
             verificationColorSensors[i].enable(false);
         }
+    }
+    public boolean scanAllSlotsWhenIntakeAligned(){
+        if(!slotChanger.isIntakeAligned()) return false;
+        scanSlotsForVerification();
+        for(int i = 0; i < slotColor.length; i++){
+            slotColor[i] = sensedSlotColor[i];
+        }
+        return true;
     }
     public boolean isCurrentSlotDetectedByVerification(){
         scanSlotsForVerification();

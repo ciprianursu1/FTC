@@ -56,7 +56,7 @@ public class PIDController {
         errorSum += error * dt;
         errorSum = Math.max(Math.min(errorSum, integralMax), integralMin);
 
-        output = (kP * error) + (kI * errorSum) + (kD * derivative) + (kF * Math.signum(error));
+        output = (kP * error) + (kI * errorSum) - (kD * derivative) + (kF * Math.signum(error));
         output = Math.max(Math.min(output, 1.0), -1.0);
 
         return output;
