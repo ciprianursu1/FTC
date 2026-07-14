@@ -26,6 +26,7 @@ public final class RobotConfig {
     };
     public static final int LIMELIGHT_POSITION_PIPELINE = 5;
     public static final int LIMELIGHT_MOTIF_PIPELINE = 4;
+    public static final double TELEMETRY_UPDATE_INTERVAL_MS = 100;
     public static final double MOTIF_X = 72;
     public static final double MOTIF_Y = 288;
     public static final int[] DEFAULT_MOTIF = {1,2,2};

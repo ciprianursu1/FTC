@@ -35,10 +35,10 @@ public class MecanumDrive {
 
     }
     public void init() {
-        front_right.setDirection(DcMotorSimple.Direction.REVERSE);
-        back_right.setDirection(DcMotorSimple.Direction.REVERSE);
-        front_left.setDirection(DcMotorSimple.Direction.FORWARD);
-        back_left.setDirection(DcMotorSimple.Direction.FORWARD);
+        front_right.setDirection(DcMotorSimple.Direction.FORWARD);
+        back_right.setDirection(DcMotorSimple.Direction.FORWARD);
+        front_left.setDirection(DcMotorSimple.Direction.REVERSE);
+        back_left.setDirection(DcMotorSimple.Direction.REVERSE);
         back_left.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         back_right.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         front_left.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);

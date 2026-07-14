@@ -4,6 +4,7 @@ package org.firstinspires.ftc.teamcode.Subsystems;
 import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.robotcore.hardware.Gamepad;
+import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
@@ -11,6 +12,7 @@ public class Robot {
     MecanumDrive drive;
     public ArtifactHandler artifactHandler;
     Telemetry telemetry;
+    ElapsedTime telemetryTimer = new ElapsedTime();
     Gamepad gamepad1;
     Gamepad gamepad2;
     PinpointLocalizer pinpoint;
@@ -45,11 +47,19 @@ public class Robot {
     }
     public void update(){
         pose = pinpoint.getPose();
+        if(pose == null) {
+            pinpoint.update();
+            pose = pinpoint.getPose();
+        }
         if(!isAuto) {
             checkGamepadInput();
-            if(!artifactHandler.shoot) autoEnableAim();
-            else artifactHandler.enableAiming(true);
-            drive.update(pose.getHeading());
+            if(pose != null) {
+                if(!artifactHandler.shoot) autoEnableAim();
+                else artifactHandler.enableAiming(true);
+                drive.update(pose.getHeading());
+            } else {
+                artifactHandler.enableAiming(false);
+            }
         }
         artifactHandler.update(manualSort);
         updateTelemetry();
@@ -116,6 +126,11 @@ public class Robot {
     }
     private void updateTelemetry() {
         if(telemetry == null) return;
+        if(RobotConfig.TELEMETRY_UPDATE_INTERVAL_MS > 0
+                && telemetryTimer.milliseconds() < RobotConfig.TELEMETRY_UPDATE_INTERVAL_MS) {
+            return;
+        }
+        telemetryTimer.reset();
         telemetry.addLine("=== Robot ===");
         telemetry.addData("Robot Auto", isAuto);
         telemetry.addData("Robot Alliance", alliance ? "BLUE" : "RED");

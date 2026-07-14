@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode.Subsystems;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.teamcode.TeleOp.Main.PIDController;
 
 public class ClosedLoopDC {
@@ -123,6 +124,8 @@ public class ClosedLoopDC {
         telemetry.addData(name + " Raw Position", "%.0f ticks", lastRawPosition);
         telemetry.addData(name + " Position", "%.2f", getCurrentPosition());
         telemetry.addData(name + " Velocity", "%.2f ticks/s", lastVelocity);
+        telemetry.addData(name + " Current", "%.2f A", motor.getCurrent(CurrentUnit.AMPS));
+        telemetry.addData(name + " Over Current", motor.isOverCurrent());
         telemetry.addData(name + " Target", "%.2f", lastTarget);
         telemetry.addData(name + " PID Target", "%.2f", lastPidTarget);
         telemetry.addData(name + " PID Current", "%.2f", lastPidCurrent);

@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 
 public class Flywheel {
     DcMotorEx motor;
@@ -18,7 +19,6 @@ public class Flywheel {
     private final PIDFCoefficients pid;
     public Flywheel(DcMotorEx motor,double ticksPerRev,double rpmDeadband,double radius,double efficiency,double disableRPM, PIDFCoefficients pid) {
         this.motor = motor;
-        motor.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, pid);
         this.pid = pid;
         this.ticksPerRev = ticksPerRev;
         this.rpmDeadband = rpmDeadband;
@@ -51,6 +51,7 @@ public class Flywheel {
     public void init(){
         motor.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         motor.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
+        motor.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, pid);
         motor.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.FLOAT);
     }
     public void enable(boolean enabled){
@@ -80,6 +81,8 @@ public class Flywheel {
         telemetry.addData("Flywheel On Target", isOnTarget());
         telemetry.addData("Flywheel Disable RPM", "%.1f", disableRPM);
         telemetry.addData("Flywheel Velocity", "%.1f ticks/s", motor.getVelocity());
+        telemetry.addData("Flywheel Current", "%.2f A", motor.getCurrent(CurrentUnit.AMPS));
+        telemetry.addData("Flywheel Over Current", motor.isOverCurrent());
         telemetry.addData("Flywheel Target Velocity", "%.1f ticks/s", targetRPM * ticksPerRev / 60.0);
         telemetry.addData("Flywheel Encoder", "%d ticks", motor.getCurrentPosition());
         telemetry.addData("Flywheel PIDF", "P %.3f I %.3f D %.3f F %.3f", pid.p, pid.i, pid.d, pid.f);

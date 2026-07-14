@@ -33,6 +33,8 @@ public class Limelight {
     public void changePipeline(int pipeline,boolean isMotifOnly){
         limelight.pipelineSwitch(pipeline);
         motifMode = isMotifOnly;
+        lastTimestamp = 0;
+        freshData = false;
     }
     public int getTagID(){
         return tagID;
