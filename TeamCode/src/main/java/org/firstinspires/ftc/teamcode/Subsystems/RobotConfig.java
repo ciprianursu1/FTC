@@ -17,33 +17,45 @@ public final class RobotConfig {
 //        {{48,144},{99,144},{72,116}},
         {{32,76},{112,76},{72,0}},
         {{-4,290},{148,290},{72,212}},
+            {{43,144},{72,172},{101,144}},
+            {{43,144},{72,118},{101,144}}
     };
     public static final double[][][] autoAimZoneTargets = {
 //            {{72,9},{72,9}},
 //            {{135.5,288},{8.5,288}},
             {{72,9},{72,9}},
-            {{135.5,288},{8.5,288}}
+            {{135.5,288},{8.5,288}},
+            {{72,9},{72,9}},
+            {{72,9},{72,9}}
     };
     public static final int LIMELIGHT_POSITION_PIPELINE = 5;
     public static final int LIMELIGHT_MOTIF_PIPELINE = 4;
+    public static final boolean TELEMETRY_ENABLED = true;
     public static final double TELEMETRY_UPDATE_INTERVAL_MS = 100;
+    public static final double CLOSED_LOOP_PID_DT_SECONDS = 0.02;
     public static final double MOTIF_X = 72;
     public static final double MOTIF_Y = 288;
     public static final int[] DEFAULT_MOTIF = {1,2,2};
     public static final double SECONDARY_TARGET_X = 72;
     public static final double SECONDARY_TARGET_Y = 9;
-    public static final PIDController spindexerPID = new PIDController(0.01,0,0.0002,0);
-    public static final double SPINDEXER_POWER = 0.8;
+    public static final double SPINDEXER_KP = 0.014;
+    public static final double SPINDEXER_KI = 0.24; //0.1
+    public static final double SPINDEXER_KD = 0.0002; //0.0006
+    public static final double SPINDEXER_KF = 0;
+    public static final double SPINDEXER_POSITION_TOLERANCE = 1.0;
+    public static final PIDController spindexerPID = createSpindexerPID();
+    public static final double SPINDEXER_POWER = 0.5;
     public static final double SPINDEXER_TICKS_PER_REV = 384.5;
-    public static final double SPINDEXER_OUTTAKE_OFFSET_DEG = 186;
+    public static final double SPINDEXER_OUTTAKE_OFFSET_DEG = 184;
     public static final int SPINDEXER_SLOTS = 3;
     public static final int TRANSFER_VERIFY_DELAY = 150;
     public static final int TRANSFER_MAX_RETRIES = 2;
+    public static final double TRANSFER_STALL_DOWN_INCREMENT = 0.02;
     public static final double SLOT_STALL_TIMEOUT_MS = 500;
-    public static final double SLOT_STALL_MIN_MOVEMENT_DEG = 2.0;
+    public static final double SLOT_STALL_MIN_MOVEMENT_DEG = 1.0;
     public static final int[] VERIFICATION_SENSOR_TO_SLOT = {0,1,2};
     public static final double TRANSFER_UP = 0.02;
-    public static final double TRANSFER_DOWN = 0.29;
+    public static final double TRANSFER_DOWN = 0.3;
     public static final double HOOD_MAX_ANGLE = 70;
     public static final double HOOD_MIN_ANGLE = 50;
     public static final double TURRET_POWER = 0.5;
@@ -51,14 +63,18 @@ public final class RobotConfig {
     public static final double TURRET_LIMIT_LEFT = 110;
     public static final double TURRET_LIMIT_RIGHT = -110;
     public static final double TURRET_START_ANGLE = -180;
-    public static final PIDController turretPID = new PIDController(0.01,0,0.0002,0);
+    public static final double TURRET_KP = 0.03;
+    public static final double TURRET_KI = 0.033;
+    public static final double TURRET_KD = 0.0002;
+    public static final double TURRET_KF = 0;
+    public static final PIDController turretPID = createTurretPID();
     public static final double TARGET_Z = 0.75;
     public static final double FLYWHEEL_TICKS_PER_REV = 28;
     public static final double FLYWHEEL_RPM_DEADBAND = 10.0;
     public static final double FLYWHEEL_RADIUS_METERS = 0.048;
     public static final double FLYWHEEL_EFFICIENCY = 0.43;
     public static final double FLYWHEEL_DISABLE_RPM = 2000.0;
-    public static final PIDFCoefficients FLYWHEEL_PID = new PIDFCoefficients(28,0,0,0);
+    public static final PIDFCoefficients FLYWHEEL_PID = new PIDFCoefficients(120,9,10,0);
 
 
 
@@ -115,4 +131,17 @@ public final class RobotConfig {
             RevHubOrientationOnRobot.LogoFacingDirection.LEFT;
     public static final RevHubOrientationOnRobot.UsbFacingDirection IMU_USB =
             RevHubOrientationOnRobot.UsbFacingDirection.UP;
+
+    public static PIDController createSpindexerPID() {
+        PIDController pid = new PIDController(SPINDEXER_KP, SPINDEXER_KI, SPINDEXER_KD, SPINDEXER_KF);
+        pid.setPositionTolerance(SPINDEXER_POSITION_TOLERANCE);
+        pid.setFixedDt(CLOSED_LOOP_PID_DT_SECONDS);
+        return pid;
+    }
+
+    public static PIDController createTurretPID() {
+        PIDController pid = new PIDController(TURRET_KP, TURRET_KI, TURRET_KD, TURRET_KF);
+        pid.setFixedDt(CLOSED_LOOP_PID_DT_SECONDS);
+        return pid;
+    }
 }

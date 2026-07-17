@@ -38,6 +38,7 @@ public class ClosedLoopDC {
         if(isAuto) motor.setMode(DcMotorEx.RunMode.STOP_AND_RESET_ENCODER);
         motor.setMode(DcMotorEx.RunMode.RUN_WITHOUT_ENCODER);
         motor.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
+        reset("init");
     }
     public void setMaxPower(double maxPower) {
         this.maxPower = maxPower;
@@ -61,10 +62,16 @@ public class ClosedLoopDC {
         if(pid == null) return 0;
         return pid.getDeadband();
     }
+    public double getLastTarget(){
+        return lastTarget;
+    }
+    public double getLastPidTarget(){
+        return lastPidTarget;
+    }
     public void setAngleMode(boolean angleMode) {
         if (this.angleMode != angleMode) {
             this.angleMode = angleMode;
-            reset();
+            reset("angle mode");
         }
     }
     public void update(double target){
@@ -78,7 +85,6 @@ public class ClosedLoopDC {
             lastPidCurrent = lastCurrent;
             lastPidOutput = 0;
             lastPower = 0;
-            reset();
             return;
         }
 
@@ -102,16 +108,20 @@ public class ClosedLoopDC {
         lastPidTarget = pidTarget;
         lastPidCurrent = pidCurrent;
         lastPower = power;
-        motor.setPower(power);
+        if(enabled) motor.setPower(power);
     }
     public void enable(boolean enabled){
+        if(enabled && !this.enabled) reset("enable");
         this.enabled = enabled;
     }
     public boolean isEnabled(){
         return enabled;
     }
     public void reset(){
-        if(pid != null) pid.reset();
+        reset("manual");
+    }
+    public void reset(String reason){
+        if(pid != null) pid.reset(reason);
     }
     public void setPIDController(PIDController pid){
         this.pid = pid;
@@ -135,8 +145,12 @@ public class ClosedLoopDC {
         telemetry.addData(name + " On Target", isOnTarget());
         if(pid != null) {
             telemetry.addData(name + " PIDF", "P %.4f I %.4f D %.4f F %.4f", pid.getkP(), pid.getkI(), pid.getkD(), pid.getkF());
-            telemetry.addData(name + " PID State", "err %.2f sum %.3f out %.3f", pid.getLastError(), pid.getErrorSum(), pid.getOutput());
+            telemetry.addData(name + " PID State", "err %.2f sum %.3f out %.3f dt %.3f real %.3f", pid.getLastError(), pid.getErrorSum(), pid.getOutput(), pid.getLastDt(), pid.getLastMeasuredDt());
+            telemetry.addData(name + " Integral State", pid.getLastIntegralState());
+            telemetry.addData(name + " Integral Delta", "%.3f", pid.getLastIntegralDelta());
+            telemetry.addData(name + " PID Reset", "%d %s", pid.getResetCount(), pid.getLastResetReason());
             telemetry.addData(name + " PID Limits", "deadband %.2f integral %.2f..%.2f", pid.getDeadband(), pid.getIntegralMin(), pid.getIntegralMax());
+            telemetry.addData(name + " PID Fixed Dt", "%.3f s", pid.getFixedDt());
         } else {
             telemetry.addData(name + " PID", "null");
         }

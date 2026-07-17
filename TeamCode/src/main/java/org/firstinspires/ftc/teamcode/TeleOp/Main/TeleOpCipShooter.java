@@ -4,6 +4,8 @@ import com.pedropathing.ftc.InvertedFTCCoordinates;
 import com.pedropathing.ftc.PoseConverter;
 import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
+import com.bylazar.telemetry.PanelsTelemetry;
+import com.bylazar.telemetry.TelemetryManager;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
@@ -34,6 +36,7 @@ public class TeleOpCipShooter extends OpMode {
     Pose pose;
     IMU imu;
     Shooter shooter;
+    TelemetryManager telemetryM;
     static final double INCH_PER_METER = 100/2.54;
     double targetX = 0;
     double targetY = 144;
@@ -57,6 +60,7 @@ public class TeleOpCipShooter extends OpMode {
 
 
     public void init() {
+        telemetryM = PanelsTelemetry.INSTANCE.getTelemetry();
         shooter = new Shooter(hardwareMap,"flywheel","tureta","unghituretaoy");
         shooter.init(telemetry,false);
         spinner = new DCSpindexer(hardwareMap,"Color1","Color2","Color3","spinner","ejector",telemetry);
@@ -118,6 +122,7 @@ public class TeleOpCipShooter extends OpMode {
 //        limelight.pipelineSwitch(5);
 //    }
     public void loop(){
+        applyPIDConfig();
         pinpoint.update();
         pose = pinpoint.getPose();
         velocity = pinpoint.getVelocity();
@@ -139,7 +144,7 @@ public class TeleOpCipShooter extends OpMode {
         } else {
             shooter.disableLauncher();
         }
-        shooter.update(pose,velocity,targetX, targetY,spinner.isReady() && spinner.requestingOuttake);
+        shooter.update(pose,velocity,targetX, targetY,spinner.requestingOuttake);
         switch (intakeState){
             case ON:
                 intake.setPower(1);
@@ -155,6 +160,7 @@ public class TeleOpCipShooter extends OpMode {
             spinner.setReady(shooter.isRPMInRange() && shooter.isTurretOnTarget());
         }
         spinner.update();
+        sendPanelsTelemetry();
         if(gamepad2.circleWasPressed()){
             spinner.cancelOuttake();
             if(intakeState == IntakeState.ON){
@@ -164,6 +170,12 @@ public class TeleOpCipShooter extends OpMode {
             }
         }
         if(gamepad2.right_trigger > 0.8){
+            targetX = blue ? 0 : 144;
+            targetY = 288;
+            spinner.requestOuttake();
+        } else if (gamepad2.left_trigger > 0.8) {
+            targetX = 72;
+            targetY = 0;
             spinner.requestOuttake();
         } else {
             spinner.cancelOuttake(); // experimental
@@ -201,6 +213,39 @@ public class TeleOpCipShooter extends OpMode {
         shooter.setTurretAngleOffset(turretOffset);
         spinner.setOffset((int)spinnerOffset);
 //        limelightCorrectionMode = gamepad2.left_trigger > 0.5;
+    }
+    private void applyPIDConfig() {
+        Shooter.turretKp = TeleOpCipShooterPIDConfig.turretKp;
+        Shooter.turretKi = TeleOpCipShooterPIDConfig.turretKi;
+        Shooter.turretKd = TeleOpCipShooterPIDConfig.turretKd;
+        Shooter.turretKf = TeleOpCipShooterPIDConfig.turretKf;
+        Shooter.turretTolerance = TeleOpCipShooterPIDConfig.turretTolerance;
+        Shooter.turretIntegralMin = TeleOpCipShooterPIDConfig.turretIntegralMin;
+        Shooter.turretIntegralMax = TeleOpCipShooterPIDConfig.turretIntegralMax;
+        Shooter.turretMaxPower = TeleOpCipShooterPIDConfig.turretMaxPower;
+        Shooter.turretCcwLimitDeg = TeleOpCipShooterPIDConfig.turretCcwLimitDeg;
+        Shooter.turretCwLimitDeg = TeleOpCipShooterPIDConfig.turretCwLimitDeg;
+        Shooter.turretResetIntegralOnSignChange = TeleOpCipShooterPIDConfig.turretResetIntegralOnSignChange;
+
+        Shooter.kP_v = TeleOpCipShooterPIDConfig.flywheelKp;
+        Shooter.kI_v = TeleOpCipShooterPIDConfig.flywheelKi;
+        Shooter.kD_v = TeleOpCipShooterPIDConfig.flywheelKd;
+        Shooter.kF_v = TeleOpCipShooterPIDConfig.flywheelKf;
+
+        DCSpindexer.kP = TeleOpCipShooterPIDConfig.spindexerKp;
+        DCSpindexer.kI = TeleOpCipShooterPIDConfig.spindexerKi;
+        DCSpindexer.kD = TeleOpCipShooterPIDConfig.spindexerKd;
+        DCSpindexer.integralMin = TeleOpCipShooterPIDConfig.spindexerIntegralMin;
+        DCSpindexer.integralMax = TeleOpCipShooterPIDConfig.spindexerIntegralMax;
+        DCSpindexer.SPINDEXER_SPEED = TeleOpCipShooterPIDConfig.spindexerMaxPower;
+        DCSpindexer.POSITION_TOLERANCE = TeleOpCipShooterPIDConfig.spindexerPositionTolerance;
+    }
+    private void sendPanelsTelemetry() {
+        if (telemetryM == null) return;
+
+        shooter.appendPanelsTelemetry(telemetryM);
+        spinner.appendPanelsTelemetry(telemetryM);
+        telemetryM.update(telemetry);
     }
 
     private Pose processPedroPose(Pose pedroPose){

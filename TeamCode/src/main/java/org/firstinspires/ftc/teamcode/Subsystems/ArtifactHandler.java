@@ -69,7 +69,10 @@ public class ArtifactHandler {
         if(!on || reverse) {
             boolean wasIntakeBlocked = intakeBlocked;
             intakeBlocked = false;
-            if(wasIntakeBlocked) spindexer.enable(true);
+            if(wasIntakeBlocked) {
+                spindexer.clearStall();
+                spindexer.enable(true);
+            }
         }
         intake.enable(on && (!intakeBlocked || reverse));
         intake.setReverse(reverse);
@@ -100,6 +103,7 @@ public class ArtifactHandler {
             verificationReady = false;
             retryingTransfer = false;
             transferRetries = 0;
+            transferServo.resetDownPosition();
             spindexer.setVerificationAlignment(false);
         }
     }
@@ -149,7 +153,7 @@ public class ArtifactHandler {
             transferServo.enable(true);
             turretSwivel.enable(true);
             if(spindexer.isStalled()) {
-                failTransfer();
+                retryStalledTransfer();
             } else if(!spindexer.slotChanger.isBusy()){
                     if(retryingTransfer) {
                         spindexer.enable(false);
@@ -185,7 +189,7 @@ public class ArtifactHandler {
 
             }
         } else if(spindexer.isStalled()) {
-            failIntakeSlotChange();
+            retryIntakeSlotChange();
         } else {
             if(enableAiming) {
                 flywheel.enable(false);
@@ -228,6 +232,7 @@ public class ArtifactHandler {
         transferred = false;
         retryingTransfer = false;
         transferRetries = 0;
+        transferServo.resetDownPosition();
         spindexer.setVerificationAlignment(false);
         spindexer.clearCurrentSlot();
         spindexer.enable(true);
@@ -247,6 +252,19 @@ public class ArtifactHandler {
         }
         transferServoTimer.reset();
     }
+    private void retryStalledTransfer() {
+        if(!transferServo.addToDownPosition(RobotConfig.TRANSFER_STALL_DOWN_INCREMENT)) {
+            failTransfer();
+            return;
+        }
+        transferServo.goDown();
+        spindexer.clearStall();
+        spindexer.enable(true);
+        spindexer.setVerificationAlignment(verifyingTransfer);
+        verificationReady = false;
+        retryingTransfer = false;
+        transferServoTimer.reset();
+    }
     private void failTransfer() {
         transferBlocked = true;
         shoot = false;
@@ -255,22 +273,24 @@ public class ArtifactHandler {
         verificationReady = false;
         retryingTransfer = false;
         transferRetries = 0;
+        transferServo.resetDownPosition();
         transferServo.goDown();
+        spindexer.clearStall();
         spindexer.enable(true);
         spindexer.setVerificationAlignment(false);
         spindexer.requestOuttake(false);
         transferServoTimer.reset();
     }
-    private void failIntakeSlotChange() {
-        intakeBlocked = true;
+    private void retryIntakeSlotChange() {
+        intakeBlocked = false;
         shoot = false;
         transferred = false;
         verifyingTransfer = false;
         verificationReady = false;
         retryingTransfer = false;
         transferRetries = 0;
-        intake.enable(false);
-        spindexer.enable(false);
+        spindexer.clearStall();
+        spindexer.enable(true);
         spindexer.setVerificationAlignment(false);
         spindexer.requestOuttake(false);
         transferServo.goDown();

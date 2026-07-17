@@ -44,12 +44,7 @@ public class Auto12BlueClose extends OpMode {
     Shooter shooter;
     IMU imu;
 
-    /* ===================== FLYWHEEL (PIDF VELOCITY) ===================== */
-    static final double FLYWHEEL_TICKS_PER_REV = 28.0 * 1.4;
-
-    // imported from TeleOp shooter
-    public static double TARGET_RPM = 2350;
-    public static double kP_v = 50.0;
+    public static double kP_v = 120;
     public static double kI_v = 0.0;
     public static double kD_v = 0.5;
     public static double kF_v = 14.0;

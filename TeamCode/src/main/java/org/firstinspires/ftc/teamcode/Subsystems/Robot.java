@@ -125,6 +125,7 @@ public class Robot {
         artifactHandler.init(isAuto);
     }
     private void updateTelemetry() {
+        if(!RobotConfig.TELEMETRY_ENABLED) return;
         if(telemetry == null) return;
         if(RobotConfig.TELEMETRY_UPDATE_INTERVAL_MS > 0
                 && telemetryTimer.milliseconds() < RobotConfig.TELEMETRY_UPDATE_INTERVAL_MS) {

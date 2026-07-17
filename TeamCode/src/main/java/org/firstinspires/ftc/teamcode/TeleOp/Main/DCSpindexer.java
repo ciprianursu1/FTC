@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode.TeleOp.Main;
 import android.graphics.Color;
 import android.graphics.pdf.PdfRenderer;
 
+import com.bylazar.telemetry.TelemetryManager;
 import com.qualcomm.hardware.rev.RevColorSensorV3;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
@@ -21,9 +22,9 @@ import java.util.Arrays;
 public class DCSpindexer {
     final double TICKS_PER_REV = 384.5;
     final double TICKS_PER_120 = TICKS_PER_REV/3.0;
-    final double SPINDEXER_SPEED = 0.8;
+    public static double SPINDEXER_SPEED = 0.8;
     final double TRANSFER_UP = 0.02;
-    final double TRANSFER_DOWN = 0.28;
+    final double TRANSFER_DOWN = 0.3;
     final double GREEN_MIN = 140;
     final double GREEN_MAX = 175;
     final double PURPLE_MIN = 190;
@@ -53,9 +54,16 @@ public class DCSpindexer {
     int targetSlot = 0;
     int motifIndex = 0;
     int lastError = 0;
+    double errorSum = 0;
     int tickOffset = 0;
-     double kP = 0.01;
-     double kD = 0.0002;
+    public static double kP = 0.009;
+    public static double kI = 0.0005;
+    public static double kD = 0.00005;
+    public static double integralMin = -5;
+    public static double integralMax = 5;
+    int pidError = 0;
+    int pidDerivative = 0;
+    double pidOutput = 0;
     public boolean requestingOuttake = false;
     boolean lastDelayActive = false;
     boolean outtakeFinished = false;
@@ -204,23 +212,34 @@ public class DCSpindexer {
 
         targetPosition += moveTicks;
         rotating = true;
+        resetPID();
+    }
+    private void resetPID() {
+        lastError = 0;
+        errorSum = 0;
     }
     private void updateSpindexerPID(int targetPosition) {
         currentPosition = spindexer.getCurrentPosition() + tickOffset;
         int error = targetPosition - currentPosition;
 
         int derivative = error - lastError;
+        pidError = error;
+        pidDerivative = derivative;
         lastError = error;
+        errorSum += error;
+        errorSum = Math.max(integralMin, Math.min(integralMax, errorSum));
 
         double output =
                 (error * kP) +
+                        (errorSum * kI) +
                         (derivative * kD);
 
         output = Math.max(-SPINDEXER_SPEED, Math.min(SPINDEXER_SPEED, output));
+        pidOutput = output;
 
         spindexer.setPower(output);
     }
-    private static final double POSITION_TOLERANCE = 1;
+    public static double POSITION_TOLERANCE = 1;
     int notBusyConfidence = 0;
     final int BUSY_THRESHOLD = 3;
     private boolean spindexerAtTarget() {
@@ -250,6 +269,7 @@ public class DCSpindexer {
 
         lastDelayActive = delayNow;
         if (delayNow){
+            resetPID();
             updateSpindexerPID(currentPosition);
             return;
         }
@@ -308,7 +328,7 @@ public class DCSpindexer {
                             break;
                         }
                         if (!preOuttakeOffsetDone) {
-                            targetPosition += (int) (TICKS_PER_REV / 2.0) - 9;
+                            targetPosition += (int) ((TICKS_PER_REV / 2.0) - TICKS_PER_REV/60.0);
                             preOuttakeOffsetDone = true;
                         }
                         int nextSlot = findSlotForColor(motif[0]);
@@ -395,7 +415,7 @@ public class DCSpindexer {
                     targetPosition = 0;
                     state = SpindexerState.ROTATING_TO_EMPTY;
                     transfer.setPosition(TRANSFER_DOWN);
-                    startDelay(300);
+                    startDelay(500);
                     transferUp = false;
                     outtakeFinished = true;
                     break;
@@ -409,19 +429,19 @@ public class DCSpindexer {
                     }
                 } else {
                     transfer.setPosition(TRANSFER_DOWN);
-                    startDelay(250);
-                        int nextSlot = findSlotForColor(motif[motifIndex%2 + 1]);
-                        motifIndex++;
-                        if(nextSlot != -1) {
-                            rotateToSlot(nextSlot);
-                            state = SpindexerState.ROTATING_TO_OUTTAKE;
-                        } else {
-                            requestingOuttake = false;
-                            targetPosition = 0;
-                            outtakeFinished = true;
-                            state = SpindexerState.ROTATING_TO_EMPTY;
-                        }
+                    startDelay(500);
+                    int nextSlot = findSlotForColor(motif[motifIndex%2 + 1]);
+                    motifIndex++;
+                    if(nextSlot != -1) {
+                        rotateToSlot(nextSlot);
+                        state = SpindexerState.ROTATING_TO_OUTTAKE;
+                    } else {
+                        requestingOuttake = false;
+                        targetPosition = 0;
+                        outtakeFinished = true;
+                        state = SpindexerState.ROTATING_TO_EMPTY;
                     }
+                }
                 break;
             case ROTATING_TO_OUTTAKE:
                 if (spindexerAtTarget()) {
@@ -451,6 +471,8 @@ public class DCSpindexer {
         telemetry.addData("Motor Target", targetPosition);
         telemetry.addData("Motor Pos", spindexer.getCurrentPosition());
         telemetry.addData("Motor Busy", spindexer.isBusy());
+        telemetry.addData("PID", "P %.4f I %.4f D %.4f", kP, kI, kD);
+        telemetry.addData("PID Integral", "%.2f", errorSum);
 
         telemetry.addData("Requesting Outtake", requestingOuttake);
         telemetry.addData("Ready To Shoot", readyToShoot);
@@ -466,6 +488,21 @@ public class DCSpindexer {
 
         telemetry.addData("Transfer Servo", transfer.getPosition());
         telemetry.addData("Delay Active", delayActive());
+    }
+    public void appendPanelsTelemetry(TelemetryManager telemetryM) {
+        if (telemetryM == null) return;
+
+        telemetryM.addData("Spindexer Current", currentPosition);
+        telemetryM.addData("Spindexer Target", targetPosition);
+        telemetryM.addData("Spindexer Error", pidError);
+        telemetryM.addData("Spindexer Output", pidOutput);
+        telemetryM.addData("Spindexer Error Sum", errorSum);
+        telemetryM.addData("Spindexer Derivative", pidDerivative);
+        telemetryM.addData("Spindexer kP", kP);
+        telemetryM.addData("Spindexer kI", kI);
+        telemetryM.addData("Spindexer kD", kD);
+        telemetryM.addData("Spindexer Max Power", SPINDEXER_SPEED);
+        telemetryM.addData("Spindexer Position Tolerance", POSITION_TOLERANCE);
     }
 
 

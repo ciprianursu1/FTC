@@ -11,6 +11,7 @@ public class TransferServo {
     private boolean goUp; //true = up, false = down
     private boolean enabled = true;
     private double posDisable;
+    private double downAdjustment = 0;
     public TransferServo(Servo transferServo, double posUp, double posDown, double posDisable) {
         this.transferServo = transferServo;
         this.posUp = posUp;
@@ -19,6 +20,17 @@ public class TransferServo {
     }
     public void setPosDisable(double posDisable){
         this.posDisable = posDisable;
+    }
+    public boolean addToDownPosition(double amount){
+        double lastAdjustment = downAdjustment;
+        downAdjustment = Math.max(0, Math.min(1 - posDown, downAdjustment + amount));
+        return downAdjustment != lastAdjustment;
+    }
+    public void resetDownPosition(){
+        downAdjustment = 0;
+    }
+    public double getDownPosition(){
+        return posDown + downAdjustment;
     }
     public void goUp(){
         goUp = true;
@@ -35,7 +47,7 @@ public class TransferServo {
     public void update(){
         if(enabled) {
             if (goUp) transferServo.setPosition(posUp);
-            else transferServo.setPosition(posDown);
+            else transferServo.setPosition(getDownPosition());
         } else {
             transferServo.setPosition(posDisable);
         }
@@ -45,6 +57,7 @@ public class TransferServo {
         telemetry.addData("Transfer Enabled", enabled);
         telemetry.addData("Transfer State", goUp ? "UP" : "DOWN");
         telemetry.addData("Transfer Position", "%.3f", transferServo.getPosition());
-        telemetry.addData("Transfer Up/Down/Disabled", "%.3f / %.3f / %.3f", posUp, posDown, posDisable);
+        telemetry.addData("Transfer Up/Down/Disabled", "%.3f / %.3f / %.3f", posUp, getDownPosition(), posDisable);
+        telemetry.addData("Transfer Down Adjustment", "%.3f", downAdjustment);
     }
 }

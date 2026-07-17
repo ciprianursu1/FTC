@@ -152,7 +152,7 @@ public abstract class FreestyleAutoBase extends OpMode {
 
         ClosedLoopDC spindexerClosedLoop = new ClosedLoopDC(
                 motorRawSpindexer,
-                RobotConfig.spindexerPID,
+                RobotConfig.createSpindexerPID(),
                 RobotConfig.SPINDEXER_POWER,
                 RobotConfig.SPINDEXER_TICKS_PER_REV
         );
@@ -204,7 +204,7 @@ public abstract class FreestyleAutoBase extends OpMode {
                 new TurretSwivel(
                         new ClosedLoopDC(
                                 motorRawTurret,
-                                RobotConfig.turretPID,
+                                RobotConfig.createTurretPID(),
                                 RobotConfig.TURRET_POWER,
                                 RobotConfig.TURRET_TICKS_PER_REV
                         ),

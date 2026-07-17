@@ -24,6 +24,9 @@ public class PanelsPIDTuner extends OpMode {
                 PIDTunerConfig.kD,
                 PIDTunerConfig.kF
         );
+        pid.setFixedDt(PIDTunerConfig.fixedDtSeconds);
+        pid.setIntegralLimits(PIDTunerConfig.integralMax, PIDTunerConfig.integralMin);
+        pid.setResetIntegralOnSignChange(PIDTunerConfig.resetIntegralOnSignChange);
     }
 
     @Override
@@ -34,6 +37,9 @@ public class PanelsPIDTuner extends OpMode {
                 PIDTunerConfig.kD,
                 PIDTunerConfig.kF
         );
+        pid.setFixedDt(PIDTunerConfig.fixedDtSeconds);
+        pid.setIntegralLimits(PIDTunerConfig.integralMax, PIDTunerConfig.integralMin);
+        pid.setResetIntegralOnSignChange(PIDTunerConfig.resetIntegralOnSignChange);
         int currentTicks = motor.getCurrentPosition();
         double power = pid.update(
                 PIDTunerConfig.targetTicks,
@@ -43,6 +49,13 @@ public class PanelsPIDTuner extends OpMode {
         telemetryM.addData("Position", currentTicks);
         telemetryM.addData("Power", power);
         telemetryM.addData("Target", PIDTunerConfig.targetTicks);
+        telemetryM.addData("Fixed Dt", pid.getFixedDt());
+        telemetryM.addData("Real Dt", pid.getLastMeasuredDt());
+        telemetryM.addData("Integral", pid.getErrorSum());
+        telemetryM.addData("Integral Delta", pid.getLastIntegralDelta());
+        telemetryM.addData("Integral State", pid.getLastIntegralState());
+        telemetryM.addData("Reset Count", pid.getResetCount());
+        telemetryM.addData("Reset Reason", pid.getLastResetReason());
         telemetryM.update(telemetry);
     }
 }

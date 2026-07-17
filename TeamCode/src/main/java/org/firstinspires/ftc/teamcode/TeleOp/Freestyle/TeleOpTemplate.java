@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.TeleOp.Freestyle;
 
+import com.bylazar.telemetry.PanelsTelemetry;
+import com.bylazar.telemetry.TelemetryManager;
 import com.pedropathing.ftc.localization.localizers.PinpointLocalizer;
 import com.pedropathing.geometry.Pose;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
@@ -29,6 +31,8 @@ import org.firstinspires.ftc.teamcode.Subsystems.SlotChanger;
 import org.firstinspires.ftc.teamcode.Subsystems.Spindexer;
 import org.firstinspires.ftc.teamcode.Subsystems.TransferServo;
 import org.firstinspires.ftc.teamcode.Subsystems.TurretSwivel;
+import org.firstinspires.ftc.teamcode.TeleOp.Main.PIDController;
+import org.firstinspires.ftc.teamcode.TeleOp.Main.PIDTunerConfig;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
 @TeleOp(name="Freestyle")
@@ -36,6 +40,7 @@ public class TeleOpTemplate extends OpMode {
     Robot robot;
     Limelight limelight;
     PinpointLocalizer pinpointLocalizer;
+    TelemetryManager telemetryM;
 
     DcMotor motorLeftFront;
     DcMotor motorRightFront;
@@ -58,6 +63,7 @@ public class TeleOpTemplate extends OpMode {
 
     // --- INTERMEDIATE WRAPPER OBJECTS (CUSTOM LAYER) ---
     MecanumDrive mecanumDrive;
+    PIDController spindexerPID;
     ClosedLoopDC spindexerClosedLoop;
     SlotChanger slotChanger;
     ColorSensor wrapperColorSensor1;
@@ -84,6 +90,7 @@ public class TeleOpTemplate extends OpMode {
 
         pinpointLocalizer = new PinpointLocalizer(hardwareMap, Constants.localizerConstants);
         pinpointLocalizer.setPose(startPose);
+        telemetryM = PanelsTelemetry.INSTANCE.getTelemetry();
 
 
         motorLeftFront      = hardwareMap.get(DcMotor.class, RobotConfig.LEFT_FRONT);
@@ -122,9 +129,12 @@ public class TeleOpTemplate extends OpMode {
                 false
         );
 
+        spindexerPID = RobotConfig.createSpindexerPID();
+        updateSpindexerTuner();
+
         spindexerClosedLoop = new ClosedLoopDC(
                 motorRawSpindexer,
-                RobotConfig.spindexerPID,
+                spindexerPID,
                 RobotConfig.SPINDEXER_POWER,
                 RobotConfig.SPINDEXER_TICKS_PER_REV
         );
@@ -178,7 +188,7 @@ public class TeleOpTemplate extends OpMode {
 
         turretClosedLoop = new ClosedLoopDC(
                 motorRawTurret,
-                RobotConfig.turretPID,
+                RobotConfig.createTurretPID(),
                 RobotConfig.TURRET_POWER,
                 RobotConfig.TURRET_TICKS_PER_REV
         );
@@ -259,8 +269,63 @@ public class TeleOpTemplate extends OpMode {
             pinpointLocalizer.setPose(getVisionCorrectedPose(pinpointLocalizer.getPose(), limelight.getPose()));
         }
 
+        updateSpindexerTuner();
         robot.update();
+        if(PIDTunerConfig.freestyleCustomTargetAngle) {
+            spindexerClosedLoop.enable(true);
+            spindexerClosedLoop.update(PIDTunerConfig.targetAngleDeg);
+        }
         if(!inventoryScanned) inventoryScanned = spindexer.scanAllSlotsWhenIntakeAligned();
+        updatePanelsTelemetry();
+    }
+
+    private void updateSpindexerTuner() {
+        if(spindexerPID == null) return;
+        spindexerPID.setCoefficients(
+                PIDTunerConfig.kP,
+                PIDTunerConfig.kI,
+                PIDTunerConfig.kD,
+                PIDTunerConfig.kF
+        );
+        spindexerPID.setIntegralLimits(PIDTunerConfig.integralMax, PIDTunerConfig.integralMin);
+        spindexerPID.setResetIntegralOnSignChange(PIDTunerConfig.resetIntegralOnSignChange);
+        if(slotChanger != null) {
+            slotChanger.setCustomTargetAngle(
+                    PIDTunerConfig.freestyleCustomTargetAngle,
+                    PIDTunerConfig.targetAngleDeg
+            );
+        }
+    }
+
+    private void updatePanelsTelemetry() {
+        if(!RobotConfig.TELEMETRY_ENABLED || telemetryM == null) return;
+        telemetryM.addData("Spindexer P", spindexerPID.getkP());
+        telemetryM.addData("Spindexer I", spindexerPID.getkI());
+        telemetryM.addData("Spindexer D", spindexerPID.getkD());
+        telemetryM.addData("Spindexer F", spindexerPID.getkF());
+        telemetryM.addData("Spindexer Custom Target Enabled", slotChanger.isCustomTargetAngleEnabled());
+        telemetryM.addData("Spindexer Custom Target", PIDTunerConfig.targetAngleDeg);
+        telemetryM.addData("Spindexer Slot", slotChanger.getSlot());
+        telemetryM.addData("Spindexer Target Angle", slotChanger.getTargetAngleForTelemetry());
+        telemetryM.addData("Spindexer Motor Target", spindexerClosedLoop.getLastTarget());
+        telemetryM.addData("Spindexer PID Target", spindexerClosedLoop.getLastPidTarget());
+        telemetryM.addData("Spindexer Angle", spindexerClosedLoop.getCurrentPosition());
+        telemetryM.addData("Spindexer Error", spindexerClosedLoop.getTargetError());
+        telemetryM.addData("Spindexer Output", spindexerPID.getOutput());
+        telemetryM.addData("Spindexer Integral", spindexerPID.getErrorSum());
+        telemetryM.addData("Spindexer Integral Delta", spindexerPID.getLastIntegralDelta());
+        telemetryM.addData("Spindexer Integral State", spindexerPID.getLastIntegralState());
+        telemetryM.addData("Spindexer Integral Min", spindexerPID.getIntegralMin());
+        telemetryM.addData("Spindexer Integral Max", spindexerPID.getIntegralMax());
+        telemetryM.addData("Spindexer PID Reset Count", spindexerPID.getResetCount());
+        telemetryM.addData("Spindexer PID Reset Reason", spindexerPID.getLastResetReason());
+        telemetryM.addData("Spindexer PID Dt", spindexerPID.getLastDt());
+        telemetryM.addData("Spindexer Real Dt", spindexerPID.getLastMeasuredDt());
+        telemetryM.addData("Spindexer On Target", spindexerClosedLoop.isOnTarget());
+        telemetryM.addData("Spindexer Busy", slotChanger.isBusy());
+        telemetryM.addData("Spindexer Stalled", slotChanger.isStalled());
+        telemetryM.addData("Spindexer Outtake", slotChanger.isOuttake());
+        telemetryM.update(telemetry);
     }
 
     private Pose getVisionCorrectedPose(Pose odometryPose, Pose visionPose) {

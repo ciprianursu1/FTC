@@ -111,6 +111,9 @@ public class Spindexer {
     public boolean isStalled(){
         return slotChanger.isStalled();
     }
+    public void clearStall(){
+        slotChanger.clearStall();
+    }
     public void moveToColor(int color){
         if(slotChanger.isOuttake()) {
             for (int i = 0; i < slotColor.length; i++) {
@@ -132,6 +135,17 @@ public class Spindexer {
             slotColor[slotChanger.getSlot() - 1] = 0;
     }
     public void update(){
+        if(slotChanger.isCustomTargetAngleEnabled()) {
+            slotChanger.enable(true);
+            colorSensor.enable(false);
+            colorSensor.update();
+            for (ColorSensor verificationColorSensor : verificationColorSensors) {
+                verificationColorSensor.enable(false);
+            }
+            sampleIndex = 0;
+            sampleTimer.reset();
+            return;
+        }
         if(!enabled) {
             slotChanger.enable(false);
             slotChanger.update();

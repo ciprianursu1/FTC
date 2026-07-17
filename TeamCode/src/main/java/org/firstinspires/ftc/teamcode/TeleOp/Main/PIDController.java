@@ -8,8 +8,16 @@ public class PIDController {
     private double lastMeasurement;
     private double lastError;
     private double output = 0;
+    private double lastDt = 0;
+    private double lastMeasuredDt = 0;
+    private double fixedDt = 0;
     private double integralMax = 1.0, integralMin = -1.0;
     private double deadband = 1.0;
+    private double lastIntegralDelta = 0;
+    private int resetCount = 0;
+    private String lastResetReason = "none";
+    private boolean resetIntegralOnSignChange = false;
+    private String lastIntegralState = "reset";
     private boolean isFirstRun = true;
     private final ElapsedTime timer = new ElapsedTime();
 
@@ -22,25 +30,31 @@ public class PIDController {
     }
 
     public double update(double target, double current) {
-        double dt = timer.seconds();
+        double measuredDt = timer.seconds();
 
-        if (dt < 1e-6) {
+        if (measuredDt < 1e-6) {
             return output;
         }
 
         timer.reset();
+        lastMeasuredDt = measuredDt;
+        double dt = fixedDt > 0 ? fixedDt : measuredDt;
+        lastDt = dt;
         double error = target - current;
 
         if (Math.abs(error) < deadband) {
+            lastIntegralDelta = -errorSum;
             errorSum = 0;
+            lastIntegralState = "deadband reset";
             lastError = error;
             lastMeasurement = current;
             output = 0;
             return 0;
         }
 
-        if (Math.signum(error) != Math.signum(lastError) && lastError != 0) {
+        if (resetIntegralOnSignChange && Math.signum(error) != Math.signum(lastError) && lastError != 0) {
             errorSum = 0;
+            lastIntegralState = "sign reset";
         }
 
         double derivative = 0;
@@ -53,8 +67,14 @@ public class PIDController {
         lastError = error;
         lastMeasurement = current;
 
-        errorSum += error * dt;
-        errorSum = Math.max(Math.min(errorSum, integralMax), integralMin);
+        double unclampedErrorSum = errorSum + error * dt;
+        errorSum = Math.max(Math.min(unclampedErrorSum, integralMax), integralMin);
+        lastIntegralDelta = errorSum - (unclampedErrorSum - error * dt);
+        if(errorSum != unclampedErrorSum) {
+            lastIntegralState = "clamped";
+        } else if(!"sign reset".equals(lastIntegralState)) {
+            lastIntegralState = "accumulating";
+        }
 
         output = (kP * error) + (kI * errorSum) - (kD * derivative) + (kF * Math.signum(error));
         output = Math.max(Math.min(output, 1.0), -1.0);
@@ -77,6 +97,12 @@ public class PIDController {
         integralMin = Math.min(min, max);
         integralMax = Math.max(min, max);
     }
+    public void setFixedDt(double fixedDt) {
+        this.fixedDt = Math.max(fixedDt, 0);
+    }
+    public void setResetIntegralOnSignChange(boolean resetIntegralOnSignChange) {
+        this.resetIntegralOnSignChange = resetIntegralOnSignChange;
+    }
     public boolean isOnTarget() {
         return Math.abs(lastError) < deadband;
     }
@@ -93,14 +119,32 @@ public class PIDController {
     public double getLastMeasurement() { return lastMeasurement; }
     public double getLastError() { return lastError; }
     public double getOutput() { return output; }
+    public double getLastDt() { return lastDt; }
+    public double getLastMeasuredDt() { return lastMeasuredDt; }
+    public double getFixedDt() { return fixedDt; }
+    public double getLastIntegralDelta() { return lastIntegralDelta; }
+    public int getResetCount() { return resetCount; }
+    public String getLastResetReason() { return lastResetReason; }
+    public String getLastIntegralState() { return lastIntegralState; }
+    public boolean getResetIntegralOnSignChange() { return resetIntegralOnSignChange; }
     public double getIntegralMax() { return integralMax; }
     public double getIntegralMin() { return integralMin; }
     public double getDeadband() { return deadband; }
 
     public void reset() {
+        reset("manual");
+    }
+    public void reset(String reason) {
         errorSum = 0;
         lastError = 0;
         lastMeasurement = 0;
+        output = 0;
+        lastDt = 0;
+        lastMeasuredDt = 0;
+        lastIntegralDelta = 0;
+        resetCount++;
+        lastResetReason = reason;
+        lastIntegralState = "reset";
         isFirstRun = true;
         timer.reset();
     }
